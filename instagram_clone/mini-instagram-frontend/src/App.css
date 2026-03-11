@@ -1,0 +1,41 @@
+body {
+  background: #fafafa;
+  font-family: Arial;
+}
+
+.container {
+  width: 500px;
+  margin: auto;
+}
+
+.create-post {
+  background: white;
+  padding: 15px;
+  margin-bottom: 20px;
+  border: 1px solid #ddd;
+}
+
+.create-post input {
+  display: block;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+button {
+  padding: 8px 12px;
+  background: #3897f0;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.feed .post {
+  background: white;
+  margin-bottom: 20px;
+  border: 1px solid #ddd;
+  padding: 10px;
+}
+
+.post img {
+  width: 100%;
+}
