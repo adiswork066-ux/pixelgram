@@ -1,0 +1,160 @@
+{
+  "theme_strategy": {
+    "name": "Cinematic Dark Mode",
+    "description": "A high-contrast, immersive dark mode that prioritizes content visibility. Uses 'Soft Blacks' (#09090b) instead of pure black to reduce eye strain, paired with vibrant electric accents for interactivity.",
+    "emotional_archetype": "Archetype 7: Electric & Neon (Modified for Social)",
+    "light_mode_strategy": "Minimalist monochrome (White #FFFFFF base, Black text) to mimic gallery spaces.",
+    "dark_mode_strategy": "Deep Obsidian (#09090b) base with high-contrast white text and neon accents."
+  },
+  "colors": {
+    "primary": {
+      "light": "#09090b",
+      "dark": "#FAFAFA",
+      "description": "Primary brand color for buttons and key actions."
+    },
+    "background": {
+      "light": "#FFFFFF",
+      "dark": "#09090b",
+      "description": "Main app background."
+    },
+    "surface": {
+      "light": "#F4F4F5",
+      "dark": "#18181b",
+      "description": "Secondary background for cards, sidebars, and inputs."
+    },
+    "accent": {
+      "default": "#3b82f6",
+      "hover": "#2563eb",
+      "like": "#ec4899",
+      "description": "Electric Blue for links/actions, Hot Pink for Likes."
+    },
+    "border": {
+      "light": "#e4e4e7",
+      "dark": "#27272a",
+      "description": "Subtle borders for separation."
+    },
+    "text": {
+      "primary_light": "#09090b",
+      "secondary_light": "#71717a",
+      "primary_dark": "#FAFAFA",
+      "secondary_dark": "#a1a1aa"
+    }
+  },
+  "typography": {
+    "font_family_heading": "Outfit, sans-serif",
+    "font_family_body": "Manrope, sans-serif",
+    "scale": {
+      "h1": "text-4xl md:text-5xl font-bold tracking-tight",
+      "h2": "text-3xl md:text-4xl font-semibold tracking-tight",
+      "h3": "text-2xl font-semibold",
+      "body_lg": "text-lg leading-relaxed",
+      "body_base": "text-base leading-relaxed",
+      "caption": "text-sm text-muted-foreground"
+    },
+    "rules": [
+      "Never use Inter for headings.",
+      "Use 'tracking-tight' for all headings larger than 24px.",
+      "Body text should have 'leading-relaxed' for readability."
+    ]
+  },
+  "spacing": {
+    "container_padding": "p-4 md:p-8",
+    "section_gap": "gap-8 md:gap-12",
+    "component_gap": "gap-4",
+    "border_radius": {
+      "default": "rounded-xl",
+      "card": "rounded-2xl",
+      "button": "rounded-full"
+    }
+  },
+  "layout_strategies": {
+    "feed": {
+      "structure": "Mobile-first single column. On desktop, max-width-xl (600px) centered with fixed sidebar navigation.",
+      "container": "max-w-screen-md mx-auto",
+      "post_card": "w-full border-b border-border/50 pb-6 mb-6 last:border-0"
+    },
+    "profile": {
+      "grid": "grid grid-cols-3 gap-1 md:gap-4",
+      "header": "flex flex-col md:flex-row gap-6 items-center md:items-start p-6"
+    },
+    "navigation": {
+      "mobile": "Fixed bottom bar, backdrop-blur-xl, border-t border-white/10",
+      "desktop": "Fixed left sidebar, h-screen, w-64, border-r border-white/10"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-95",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+      "ghost": "hover:bg-accent hover:text-accent-foreground"
+    },
+    "cards": {
+      "default": "bg-card text-card-foreground border border-border shadow-sm",
+      "glass": "bg-black/40 backdrop-blur-md border border-white/10"
+    },
+    "inputs": {
+      "default": "bg-background border border-input focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+    },
+    "modals": {
+      "overlay": "bg-black/80 backdrop-blur-sm",
+      "content": "bg-background border border-border shadow-2xl duration-200"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-xl bg-background/80 border border-white/10",
+    "gradients": "Use subtle radial gradients for backgrounds, strictly avoid linear gradients on buttons.",
+    "shadows": "shadow-lg for floating elements, shadow-none for flat layout items.",
+    "micro_interactions": [
+      "Heart animation: Scale up and bounce on click.",
+      "Page transition: Fade in + slight slide up.",
+      "Button press: Scale down to 0.95."
+    ]
+  },
+  "assets": {
+    "images": {
+      "avatars": [
+        "https://images.unsplash.com/photo-1763328719057-ff6b03c816d0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHwxfHxwb3J0cmFpdCUyMHN0eWxpc2glMjBkaXZlcnNlJTIweW91bmclMjBwZW9wbGV8ZW58MHx8fHwxNzczMzA3NDE1fDA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1594456313204-96b8151f1b88?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHw0fHxwb3J0cmFpdCUyMHN0eWxpc2glMjBkaXZlcnNlJTIweW91bmclMjBwZW9wbGV8ZW58MHx8fHwxNzczMzA3NDE1fDA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1581977325979-80749e97b0c7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHwzfHxwb3J0cmFpdCUyMHN0eWxpc2glMjBkaXZlcnNlJTIweW91bmclMjBwZW9wbGV8ZW58MHx8fHwxNzczMzA3NDE1fDA&ixlib=rb-4.1.0&q=85"
+      ],
+      "posts": [
+        "https://images.unsplash.com/photo-1761207850903-24aaa74b70ef?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHw0fHxjaW5lbWF0aWMlMjB1cmJhbiUyMG5pZ2h0JTIwcGhvdG9ncmFwaHklMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzczMzA3NDE2fDA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1762219215193-8d22bc485abc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwzfHxjaW5lbWF0aWMlMjB1cmJhbiUyMG5pZ2h0JTIwcGhvdG9ncmFwaHklMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzczMzA3NDE2fDA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1697402918472-3fc44c607cce?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxjaW5lbWF0aWMlMjB1cmJhbiUyMG5pZ2h0JTIwcGhvdG9ncmFwaHklMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzczMzA3NDE2fDA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1687463221023-02f259da7d77?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMDNkJTIwc2hhcGVzJTIwZGFyayUyMGFlc3RoZXRpY3xlbnwwfHx8fDE3NzMzMDc0MTd8MA&ixlib=rb-4.1.0&q=85"
+      ]
+    },
+    "icons": {
+      "library": "lucide-react",
+      "style": "stroke-width-1.5"
+    }
+  },
+  "accessibility": {
+    "rules": [
+      "Ensure minimum contrast ratio of 4.5:1 for normal text.",
+      "All interactive elements must have aria-labels.",
+      "Support keyboard navigation for all feeds and modals.",
+      "Respect prefers-reduced-motion queries."
+    ]
+  },
+  "instructions_to_main_agent": {
+    "setup": [
+      "Install required fonts: Outfit and Manrope via Google Fonts.",
+      "Configure tailwind.config.js with the specified color palette and fonts.",
+      "Override index.css layer base to set the new CSS variables for dark/light mode."
+    ],
+    "implementation": [
+      "Build the Feed first using the 'feed' layout strategy.",
+      "Use 'lucide-react' for all icons (Heart, MessageCircle, Share2, etc.).",
+      "Implement the Sidebar for desktop and BottomNav for mobile.",
+      "Ensure all images use 'object-cover' and have proper aspect ratios (square or 4:5)."
+    ],
+    "universal_guidelines": [
+      "Don't make generic centered layouts.",
+      "Use 2-3x more spacing than feels comfortable.",
+      "All interactive elements must include a data-testid attribute.",
+      "Use sonner for toasts.",
+      "NEVER use transparent backgrounds without a blur or scrim."
+    ]
+  }
+}
