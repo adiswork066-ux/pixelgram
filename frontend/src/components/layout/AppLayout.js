@@ -68,7 +68,7 @@ const AppLayout = () => {
                                 to={item.to}
                                 className={({ isActive }) => `
                                     flex items-center gap-4 px-3 py-3 rounded-xl transition-all
-                                    hover:bg-secondary/80 group relative
+                                    hover:bg-secondary/80 group relative text-foreground
                                     ${isActive ? 'bg-secondary font-semibold' : ''}
                                 `}
                                 data-testid={`nav-${item.label.toLowerCase()}`}
@@ -85,7 +85,7 @@ const AppLayout = () => {
                             <button
                                 key={index}
                                 onClick={item.action}
-                                className="flex items-center gap-4 px-3 py-3 rounded-xl transition-all hover:bg-secondary/80 w-full text-left"
+                                className="flex items-center gap-4 px-3 py-3 rounded-xl transition-all hover:bg-secondary/80 w-full text-left text-foreground"
                                 data-testid={`nav-${item.label.toLowerCase()}`}
                             >
                                 <item.icon className="w-6 h-6" strokeWidth={1.5} />
@@ -98,7 +98,7 @@ const AppLayout = () => {
                         to={`/profile/${user?.username}`}
                         className={({ isActive }) => `
                             flex items-center gap-4 px-3 py-3 rounded-xl transition-all
-                            hover:bg-secondary/80
+                            hover:bg-secondary/80 text-foreground
                             ${isActive ? 'bg-secondary font-semibold' : ''}
                         `}
                         data-testid="nav-profile"
