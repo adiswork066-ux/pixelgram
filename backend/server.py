@@ -41,6 +41,13 @@ cloudinary.config(
 # Create the main app
 app = FastAPI()
 
+@app.get("/")
+async def root():
+    return {"status": "Pixelgrams backend running"}
+
+# Create a router with the /api prefix
+api_router = APIRouter(prefix="/api")
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
