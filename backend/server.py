@@ -480,6 +480,160 @@ async def get_following(user_id: str):
         created_at=u["created_at"]
     ) for u in users]
 
+# ==================== OPTIMIZED HELPER FUNCTIONS ====================
+
+async def get_posts_with_details(posts: list, current_user_id: Optional[str] = None) -> List[PostResponse]:
+    """Batch fetch all related data for posts to avoid N+1 queries"""
+    if not posts:
+        return []
+    
+    post_ids = [p["id"] for p in posts]
+    user_ids = list(set(p["user_id"] for p in posts))
+    
+    # Batch fetch users
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "password": 0}).to_list(len(user_ids))
+    users_map = {u["id"]: u for u in users}
+    
+    # Batch fetch likes counts using aggregation
+    likes_pipeline = [
+        {"$match": {"post_id": {"$in": post_ids}}},
+        {"$group": {"_id": "$post_id", "count": {"$sum": 1}}}
+    ]
+    likes_counts = await db.likes.aggregate(likes_pipeline).to_list(len(post_ids))
+    likes_map = {lc["_id"]: lc["count"] for lc in likes_counts}
+    
+    # Batch fetch comments counts using aggregation
+    comments_pipeline = [
+        {"$match": {"post_id": {"$in": post_ids}}},
+        {"$group": {"_id": "$post_id", "count": {"$sum": 1}}}
+    ]
+    comments_counts = await db.comments.aggregate(comments_pipeline).to_list(len(post_ids))
+    comments_map = {cc["_id"]: cc["count"] for cc in comments_counts}
+    
+    # Batch fetch user's likes if authenticated
+    user_likes_set = set()
+    if current_user_id:
+        user_likes = await db.likes.find(
+            {"post_id": {"$in": post_ids}, "user_id": current_user_id},
+            {"_id": 0, "post_id": 1}
+        ).to_list(len(post_ids))
+        user_likes_set = {ul["post_id"] for ul in user_likes}
+    
+    # Build result
+    result = []
+    for post in posts:
+        user = users_map.get(post["user_id"])
+        if not user:
+            continue
+        
+        result.append(PostResponse(
+            id=post["id"],
+            user_id=post["user_id"],
+            username=user["username"],
+            user_avatar=user.get("avatar"),
+            image=post["image"],
+            caption=post.get("caption", ""),
+            likes_count=likes_map.get(post["id"], 0),
+            comments_count=comments_map.get(post["id"], 0),
+            is_liked=post["id"] in user_likes_set,
+            created_at=post["created_at"]
+        ))
+    
+    return result
+
+async def get_comments_with_users(comments: list) -> List[CommentResponse]:
+    """Batch fetch user data for comments to avoid N+1 queries"""
+    if not comments:
+        return []
+    
+    user_ids = list(set(c["user_id"] for c in comments))
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "password": 0}).to_list(len(user_ids))
+    users_map = {u["id"]: u for u in users}
+    
+    result = []
+    for comment in comments:
+        user = users_map.get(comment["user_id"])
+        result.append(CommentResponse(
+            id=comment["id"],
+            post_id=comment["post_id"],
+            user_id=comment["user_id"],
+            username=user["username"] if user else "deleted",
+            user_avatar=user.get("avatar") if user else None,
+            text=comment["text"],
+            created_at=comment["created_at"]
+        ))
+    
+    return result
+
+async def get_notifications_with_details(notifications: list) -> List[NotificationResponse]:
+    """Batch fetch sender and post data for notifications to avoid N+1 queries"""
+    if not notifications:
+        return []
+    
+    sender_ids = list(set(n["sender_id"] for n in notifications))
+    post_ids = list(set(n["post_id"] for n in notifications if n.get("post_id")))
+    
+    # Batch fetch senders
+    senders = await db.users.find({"id": {"$in": sender_ids}}, {"_id": 0, "password": 0}).to_list(len(sender_ids))
+    senders_map = {s["id"]: s for s in senders}
+    
+    # Batch fetch posts
+    posts_map = {}
+    if post_ids:
+        posts = await db.posts.find({"id": {"$in": post_ids}}, {"_id": 0}).to_list(len(post_ids))
+        posts_map = {p["id"]: p for p in posts}
+    
+    result = []
+    for notif in notifications:
+        sender = senders_map.get(notif["sender_id"])
+        if not sender:
+            continue
+        
+        post_image = None
+        if notif.get("post_id"):
+            post = posts_map.get(notif["post_id"])
+            if post:
+                post_image = post["image"]
+        
+        result.append(NotificationResponse(
+            id=notif["id"],
+            sender_id=notif["sender_id"],
+            sender_username=sender["username"],
+            sender_avatar=sender.get("avatar"),
+            notification_type=notif["notification_type"],
+            post_id=notif.get("post_id"),
+            post_image=post_image,
+            is_read=notif["is_read"],
+            created_at=notif["created_at"]
+        ))
+    
+    return result
+
+async def get_messages_with_users(messages: list) -> List[MessageResponse]:
+    """Batch fetch sender data for messages to avoid N+1 queries"""
+    if not messages:
+        return []
+    
+    sender_ids = list(set(m["sender_id"] for m in messages))
+    senders = await db.users.find({"id": {"$in": sender_ids}}, {"_id": 0, "password": 0}).to_list(len(sender_ids))
+    senders_map = {s["id"]: s for s in senders}
+    
+    result = []
+    for msg in messages:
+        sender = senders_map.get(msg["sender_id"])
+        result.append(MessageResponse(
+            id=msg["id"],
+            conversation_id=msg["receiver_id"] if msg["sender_id"] == sender_ids[0] else msg["sender_id"],
+            sender_id=msg["sender_id"],
+            sender_username=sender["username"] if sender else "deleted",
+            sender_avatar=sender.get("avatar") if sender else None,
+            text=msg["text"],
+            is_read=msg["is_read"],
+            created_at=msg["created_at"]
+        ))
+    
+    return result
+
 # ==================== POST ROUTES ====================
 
 @api_router.post("/posts", response_model=PostResponse)
@@ -516,34 +670,7 @@ async def get_posts(
     skip = (page - 1) * page_size
     posts = await db.posts.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(page_size).to_list(page_size)
     
-    result = []
-    for post in posts:
-        user = await db.users.find_one({"id": post["user_id"]}, {"_id": 0, "password": 0})
-        if not user:
-            continue
-        
-        likes_count = await db.likes.count_documents({"post_id": post["id"]})
-        comments_count = await db.comments.count_documents({"post_id": post["id"]})
-        
-        is_liked = False
-        if current_user:
-            like = await db.likes.find_one({"post_id": post["id"], "user_id": current_user["id"]})
-            is_liked = like is not None
-        
-        result.append(PostResponse(
-            id=post["id"],
-            user_id=post["user_id"],
-            username=user["username"],
-            user_avatar=user.get("avatar"),
-            image=post["image"],
-            caption=post.get("caption", ""),
-            likes_count=likes_count,
-            comments_count=comments_count,
-            is_liked=is_liked,
-            created_at=post["created_at"]
-        ))
-    
-    return result
+    return await get_posts_with_details(posts, current_user["id"] if current_user else None)
 
 @api_router.get("/posts/feed", response_model=List[PostResponse])
 async def get_feed(
@@ -562,32 +689,7 @@ async def get_feed(
         {"_id": 0}
     ).sort("created_at", -1).skip(skip).limit(page_size).to_list(page_size)
     
-    result = []
-    for post in posts:
-        user = await db.users.find_one({"id": post["user_id"]}, {"_id": 0, "password": 0})
-        if not user:
-            continue
-        
-        likes_count = await db.likes.count_documents({"post_id": post["id"]})
-        comments_count = await db.comments.count_documents({"post_id": post["id"]})
-        
-        like = await db.likes.find_one({"post_id": post["id"], "user_id": current_user["id"]})
-        is_liked = like is not None
-        
-        result.append(PostResponse(
-            id=post["id"],
-            user_id=post["user_id"],
-            username=user["username"],
-            user_avatar=user.get("avatar"),
-            image=post["image"],
-            caption=post.get("caption", ""),
-            likes_count=likes_count,
-            comments_count=comments_count,
-            is_liked=is_liked,
-            created_at=post["created_at"]
-        ))
-    
-    return result
+    return await get_posts_with_details(posts, current_user["id"])
 
 @api_router.get("/posts/{post_id}", response_model=PostResponse)
 async def get_post(post_id: str, current_user: Optional[dict] = Depends(get_optional_user)):
@@ -631,30 +733,7 @@ async def get_user_posts(
     skip = (page - 1) * page_size
     posts = await db.posts.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(page_size).to_list(page_size)
     
-    result = []
-    for post in posts:
-        likes_count = await db.likes.count_documents({"post_id": post["id"]})
-        comments_count = await db.comments.count_documents({"post_id": post["id"]})
-        
-        is_liked = False
-        if current_user:
-            like = await db.likes.find_one({"post_id": post["id"], "user_id": current_user["id"]})
-            is_liked = like is not None
-        
-        result.append(PostResponse(
-            id=post["id"],
-            user_id=post["user_id"],
-            username=user["username"],
-            user_avatar=user.get("avatar"),
-            image=post["image"],
-            caption=post.get("caption", ""),
-            likes_count=likes_count,
-            comments_count=comments_count,
-            is_liked=is_liked,
-            created_at=post["created_at"]
-        ))
-    
-    return result
+    return await get_posts_with_details(posts, current_user["id"] if current_user else None)
 
 @api_router.delete("/posts/{post_id}")
 async def delete_post(post_id: str, current_user: dict = Depends(get_current_user)):
@@ -735,21 +814,7 @@ async def create_comment(post_id: str, comment_data: CommentCreate, current_user
 @api_router.get("/posts/{post_id}/comments", response_model=List[CommentResponse])
 async def get_comments(post_id: str):
     comments = await db.comments.find({"post_id": post_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
-    
-    result = []
-    for comment in comments:
-        user = await db.users.find_one({"id": comment["user_id"]}, {"_id": 0, "password": 0})
-        result.append(CommentResponse(
-            id=comment["id"],
-            post_id=comment["post_id"],
-            user_id=comment["user_id"],
-            username=user["username"] if user else "deleted",
-            user_avatar=user.get("avatar") if user else None,
-            text=comment["text"],
-            created_at=comment["created_at"]
-        ))
-    
-    return result
+    return await get_comments_with_users(comments)
 
 @api_router.delete("/comments/{comment_id}")
 async def delete_comment(comment_id: str, current_user: dict = Depends(get_current_user)):
@@ -772,31 +837,7 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
         {"_id": 0}
     ).sort("created_at", -1).limit(50).to_list(50)
     
-    result = []
-    for notif in notifications:
-        sender = await db.users.find_one({"id": notif["sender_id"]}, {"_id": 0, "password": 0})
-        if not sender:
-            continue
-        
-        post_image = None
-        if notif.get("post_id"):
-            post = await db.posts.find_one({"id": notif["post_id"]}, {"_id": 0})
-            if post:
-                post_image = post["image"]
-        
-        result.append(NotificationResponse(
-            id=notif["id"],
-            sender_id=notif["sender_id"],
-            sender_username=sender["username"],
-            sender_avatar=sender.get("avatar"),
-            notification_type=notif["notification_type"],
-            post_id=notif.get("post_id"),
-            post_image=post_image,
-            is_read=notif["is_read"],
-            created_at=notif["created_at"]
-        ))
-    
-    return result
+    return await get_notifications_with_details(notifications)
 
 @api_router.put("/notifications/read")
 async def mark_notifications_read(current_user: dict = Depends(get_current_user)):
@@ -836,9 +877,17 @@ async def get_conversations(current_user: dict = Depends(get_current_user)):
         if msg["receiver_id"] == current_user["id"] and not msg["is_read"]:
             conversations[other_id]["unread_count"] += 1
     
+    # Batch fetch all participant users
+    participant_ids = list(conversations.keys())
+    if not participant_ids:
+        return []
+    
+    users = await db.users.find({"id": {"$in": participant_ids}}, {"_id": 0, "password": 0}).to_list(len(participant_ids))
+    users_map = {u["id"]: u for u in users}
+    
     result = []
     for user_id, conv_data in conversations.items():
-        user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+        user = users_map.get(user_id)
         if not user:
             continue
         
