@@ -140,14 +140,14 @@ const CreatePostModal = ({ open, onClose, pixel = null, onSuccess }) => {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto pr-4">
+        <DialogHeader className="sticky top-0 z-10 bg-background pb-2">
           <DialogTitle className="font-heading text-center text-2xl">
             {isVersionMode ? `Add New Version to ${pixel.title}` : "Drop a Pixel"}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5 py-2">
+        <div className="space-y-5 py-2 pr-1">
           {!isVersionMode && (
             <div className="space-y-2">
               <label className="text-sm font-medium">Pixel title</label>
