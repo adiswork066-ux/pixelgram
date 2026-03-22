@@ -15,14 +15,234 @@ import jwt
 import cloudinary
 import cloudinary.utils
 import time
+import re
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+
+def _apply_projection(document: dict, projection: Optional[dict] = None) -> dict:
+    projected = document.copy()
+    if not projection:
+        projected.pop("_id", None)
+        return projected
+
+    include_fields = {key for key, value in projection.items() if value}
+    exclude_fields = {key for key, value in projection.items() if not value}
+
+    if include_fields:
+        return {key: projected[key] for key in include_fields if key in projected}
+
+    for field in exclude_fields:
+        projected.pop(field, None)
+
+    return projected
+
+
+def _matches_query(document: dict, query: Optional[dict] = None) -> bool:
+    if not query:
+        return True
+
+    for key, expected in query.items():
+        if key == "$or":
+            if not any(_matches_query(document, item) for item in expected):
+                return False
+            continue
+
+        value = document.get(key)
+        if isinstance(expected, dict):
+            if "$in" in expected and value not in expected["$in"]:
+                return False
+            if "$regex" in expected:
+                flags = re.IGNORECASE if "i" in expected.get("$options", "") else 0
+                pattern = expected["$regex"]
+                if value is None or re.search(pattern, str(value), flags) is None:
+                    return False
+            unsupported_ops = set(expected) - {"$in", "$regex", "$options"}
+            if unsupported_ops:
+                return False
+        elif value != expected:
+            return False
+
+    return True
+
+
+def _sort_documents(documents: list[dict], sort_spec: dict) -> list[dict]:
+    for field, direction in reversed(list(sort_spec.items())):
+        documents.sort(key=lambda item: item.get(field) or "", reverse=direction == -1)
+    return documents
+
+
+class MemoryCursor:
+    def __init__(self, documents: list[dict]):
+        self._documents = [document.copy() for document in documents]
+
+    def sort(self, field: str, direction: int):
+        _sort_documents(self._documents, {field: direction})
+        return self
+
+    def skip(self, amount: int):
+        self._documents = self._documents[amount:]
+        return self
+
+    def limit(self, amount: int):
+        self._documents = self._documents[:amount]
+        return self
+
+    async def to_list(self, length: Optional[int] = None):
+        if length is None:
+            return [document.copy() for document in self._documents]
+        return [document.copy() for document in self._documents[:length]]
+
+
+class MemoryCollection:
+    def __init__(self, name: str, database: "MemoryDatabase"):
+        self.name = name
+        self.database = database
+        self.documents: list[dict] = []
+
+    async def find_one(self, query: dict, projection: Optional[dict] = None):
+        for document in self.documents:
+            if _matches_query(document, query):
+                return _apply_projection(document, projection)
+        return None
+
+    def find(self, query: Optional[dict] = None, projection: Optional[dict] = None):
+        matches = [
+            _apply_projection(document, projection)
+            for document in self.documents
+            if _matches_query(document, query)
+        ]
+        return MemoryCursor(matches)
+
+    async def insert_one(self, document: dict):
+        self.documents.append(document.copy())
+
+    async def update_one(self, query: dict, update: dict):
+        for document in self.documents:
+            if _matches_query(document, query):
+                if "$set" in update:
+                    document.update(update["$set"])
+                return
+
+    async def update_many(self, query: dict, update: dict):
+        for document in self.documents:
+            if _matches_query(document, query):
+                if "$set" in update:
+                    document.update(update["$set"])
+
+    async def delete_one(self, query: dict):
+        for index, document in enumerate(self.documents):
+            if _matches_query(document, query):
+                self.documents.pop(index)
+                return
+
+    async def delete_many(self, query: dict):
+        self.documents = [
+            document for document in self.documents if not _matches_query(document, query)
+        ]
+
+    async def count_documents(self, query: dict):
+        return sum(1 for document in self.documents if _matches_query(document, query))
+
+    def aggregate(self, pipeline: list[dict]):
+        documents = [document.copy() for document in self.documents]
+
+        for stage in pipeline:
+            if "$match" in stage:
+                documents = [
+                    document for document in documents if _matches_query(document, stage["$match"])
+                ]
+            elif "$group" in stage:
+                group_spec = stage["$group"]
+                group_field = group_spec["_id"].lstrip("$")
+                counter_field = next(
+                    key
+                    for key, value in group_spec.items()
+                    if isinstance(value, dict) and value.get("$sum") == 1
+                )
+                grouped = {}
+                for document in documents:
+                    group_key = document.get(group_field)
+                    grouped[group_key] = grouped.get(group_key, 0) + 1
+                documents = [
+                    {"_id": group_key, counter_field: count}
+                    for group_key, count in grouped.items()
+                ]
+            elif "$lookup" in stage:
+                lookup = stage["$lookup"]
+                foreign_collection = getattr(self.database, lookup["from"])
+                local_field = lookup["localField"]
+                foreign_field = lookup["foreignField"]
+                as_field = lookup["as"]
+                for document in documents:
+                    local_value = document.get(local_field)
+                    document[as_field] = [
+                        related.copy()
+                        for related in foreign_collection.documents
+                        if related.get(foreign_field) == local_value
+                    ]
+            elif "$addFields" in stage:
+                for document in documents:
+                    for field, expression in stage["$addFields"].items():
+                        if isinstance(expression, dict) and "$size" in expression:
+                            source_field = expression["$size"].lstrip("$")
+                            document[field] = len(document.get(source_field, []))
+            elif "$sort" in stage:
+                _sort_documents(documents, stage["$sort"])
+            elif "$skip" in stage:
+                documents = documents[stage["$skip"]:]
+            elif "$limit" in stage:
+                documents = documents[:stage["$limit"]]
+            elif "$project" in stage:
+                documents = [
+                    _apply_projection(document, stage["$project"]) for document in documents
+                ]
+
+        return MemoryCursor(documents)
+
+
+class MemoryDatabase:
+    def __init__(self):
+        for collection_name in (
+            "users",
+            "posts",
+            "follows",
+            "likes",
+            "comments",
+            "notifications",
+            "messages",
+        ):
+            setattr(self, collection_name, MemoryCollection(collection_name, self))
+
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+db_name = os.environ.get('DB_NAME', 'pixelgram')
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+mongo_db = client[db_name]
+memory_db = MemoryDatabase()
+db = memory_db
+
+# fallback in-memory data (for when MongoDB is unavailable)
+db_available = False
+in_memory_users = memory_db.users.documents
+
+# Create the main app
+app = FastAPI()
+
+logger = logging.getLogger(__name__)
+
+@app.on_event('startup')
+async def validate_db_connection():
+    global db_available, db
+    try:
+        await client.admin.command('ping')
+        db_available = True
+        db = mongo_db
+    except Exception as exc:
+        db_available = False
+        db = memory_db
+        logger.warning("MongoDB unavailable, using in-memory store: %s", exc)
 
 # JWT Configuration
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-super-secret-key-change-in-production')
@@ -38,15 +258,9 @@ cloudinary.config(
     secure=True
 )
 
-# Create the main app
-app = FastAPI()
-
 @app.get("/")
 async def root():
     return {"status": "Pixelgrams backend running"}
-
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -229,61 +443,80 @@ async def create_notification(sender_id: str, receiver_id: str, notification_typ
 
 @api_router.post("/auth/register", response_model=TokenResponse)
 async def register(user_data: UserCreate):
-    # Check if user exists
-    existing_user = await db.users.find_one({"$or": [{"email": user_data.email}, {"username": user_data.username}]})
-    if existing_user:
-        raise HTTPException(status_code=400, detail="User with this email or username already exists")
-    
-    # Create user
-    user = {
-        "id": str(uuid.uuid4()),
-        "username": user_data.username,
-        "email": user_data.email,
-        "password": hash_password(user_data.password),
-        "avatar": None,
-        "bio": "",
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    await db.users.insert_one(user)
-    
-    access_token = create_access_token(user["id"])
-    refresh_token = create_refresh_token(user["id"])
-    
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user=UserResponse(
-            id=user["id"],
-            username=user["username"],
-            email=user["email"],
-            avatar=user["avatar"],
-            bio=user["bio"],
-            created_at=user["created_at"]
+    try:
+        if db_available:
+            existing_user = await db.users.find_one({"$or": [{"email": user_data.email}, {"username": user_data.username}]})
+        else:
+            existing_user = next((u for u in in_memory_users if u["email"] == user_data.email or u["username"] == user_data.username), None)
+
+        if existing_user:
+            raise HTTPException(status_code=400, detail="User with this email or username already exists")
+
+        user = {
+            "id": str(uuid.uuid4()),
+            "username": user_data.username,
+            "email": user_data.email,
+            "password": hash_password(user_data.password),
+            "avatar": None,
+            "bio": "",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+
+        if db_available:
+            await db.users.insert_one(user)
+        else:
+            in_memory_users.append(user)
+
+        access_token = create_access_token(user["id"])
+        refresh_token = create_refresh_token(user["id"])
+
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user=UserResponse(
+                id=user["id"],
+                username=user["username"],
+                email=user["email"],
+                avatar=user["avatar"],
+                bio=user["bio"],
+                created_at=user["created_at"]
+            )
         )
-    )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Auth service error: {exc}")
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(user_data: UserLogin):
-    user = await db.users.find_one({"email": user_data.email}, {"_id": 0})
-    if not user or not verify_password(user_data.password, user["password"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    access_token = create_access_token(user["id"])
-    refresh_token = create_refresh_token(user["id"])
-    
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user=UserResponse(
-            id=user["id"],
-            username=user["username"],
-            email=user["email"],
-            avatar=user.get("avatar"),
-            bio=user.get("bio", ""),
-            created_at=user["created_at"]
+    try:
+        if db_available:
+            user = await db.users.find_one({"email": user_data.email}, {"_id": 0})
+        else:
+            user = next((u for u in in_memory_users if u["email"] == user_data.email), None)
+
+        if not user or not verify_password(user_data.password, user["password"]):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        access_token = create_access_token(user["id"])
+        refresh_token = create_refresh_token(user["id"])
+        
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user=UserResponse(
+                id=user["id"],
+                username=user["username"],
+                email=user["email"],
+                avatar=user.get("avatar"),
+                bio=user.get("bio", ""),
+                created_at=user["created_at"]
+            )
         )
-    )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Auth service error: {exc}")
 
 @api_router.post("/auth/refresh", response_model=TokenResponse)
 async def refresh_token(refresh_token: str = Query(...)):
@@ -996,17 +1229,31 @@ async def generate_cloudinary_signature(
         "timestamp": timestamp,
         "folder": folder,
     }
+
+    api_secret = os.environ.get("CLOUDINARY_API_SECRET")
+    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME")
+    api_key = os.environ.get("CLOUDINARY_API_KEY")
+    if not all([api_secret, cloud_name, api_key]):
+        return {
+            "signature": None,
+            "timestamp": timestamp,
+            "cloud_name": None,
+            "api_key": None,
+            "folder": folder,
+            "resource_type": resource_type,
+            "mode": "inline",
+        }
     
     signature = cloudinary.utils.api_sign_request(
         params,
-        os.environ.get("CLOUDINARY_API_SECRET")
+        api_secret
     )
     
     return {
         "signature": signature,
         "timestamp": timestamp,
-        "cloud_name": os.environ.get("CLOUDINARY_CLOUD_NAME"),
-        "api_key": os.environ.get("CLOUDINARY_API_KEY"),
+        "cloud_name": cloud_name,
+        "api_key": api_key,
         "folder": folder,
         "resource_type": resource_type
     }
