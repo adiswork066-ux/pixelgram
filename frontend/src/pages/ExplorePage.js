@@ -1,38 +1,40 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Link } from "react-router-dom";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, TrendingUp, Heart, MessageCircle } from "lucide-react";
+import { Loader2, Search, Compass, GitBranchPlus, MessageSquareQuote } from "lucide-react";
 import PostDetailModal from "@/components/modals/PostDetailModal";
-import { getMoodMeta, MOOD_OPTIONS } from "@/lib/socialFeatures";
+import { getIntentMeta, INTENT_OPTIONS } from "@/lib/socialFeatures";
 
 const ExplorePage = () => {
   const { api } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
-  const [trendingPosts, setTrendingPosts] = useState([]);
+  const [pixels, setPixels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
-  const [selectedPost, setSelectedPost] = useState(null);
-  const [activeMood, setActiveMood] = useState("all");
+  const [selectedPixel, setSelectedPixel] = useState(null);
+  const [activeIntent, setActiveIntent] = useState("all");
 
-  const fetchTrendingPosts = useCallback(async () => {
+  const fetchPixels = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api().get("/explore?page=1&page_size=20");
-      setTrendingPosts(response.data);
+      const intentQuery =
+        activeIntent !== "all" ? `&intent=${encodeURIComponent(activeIntent)}` : "";
+      const response = await api().get(`/explore?page=1&page_size=18${intentQuery}`);
+      setPixels(response.data);
     } catch (error) {
-      console.error("Failed to fetch trending posts:", error);
+      console.error("Failed to fetch explore Pixels:", error);
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [activeIntent, api]);
 
   useEffect(() => {
-    fetchTrendingPosts();
-  }, [fetchTrendingPosts]);
+    fetchPixels();
+  }, [fetchPixels]);
 
   useEffect(() => {
     const searchUsers = async () => {
@@ -58,13 +60,19 @@ const ExplorePage = () => {
     return () => clearTimeout(debounce);
   }, [searchQuery, api]);
 
-  const filteredPosts = useMemo(() => {
-    if (activeMood === "all") {
-      return trendingPosts;
-    }
+  const handlePixelUpdate = (postId, updates) => {
+    setPixels((previous) =>
+      previous.map((pixel) => (pixel.id === postId ? { ...pixel, ...updates } : pixel)),
+    );
+    setSelectedPixel((previous) =>
+      previous?.id === postId ? { ...previous, ...updates } : previous,
+    );
+  };
 
-    return trendingPosts.filter((post) => post.mood === activeMood);
-  }, [activeMood, trendingPosts]);
+  const handlePixelDelete = (postId) => {
+    setPixels((previous) => previous.filter((pixel) => pixel.id !== postId));
+    setSelectedPixel((previous) => (previous?.id === postId ? null : previous));
+  };
 
   return (
     <div className="max-w-screen-lg mx-auto px-4 py-6" data-testid="explore-page">
@@ -73,10 +81,10 @@ const ExplorePage = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search users..."
+            placeholder="Search creators..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-12 h-12 rounded-xl bg-secondary border-none"
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="pl-12 h-12 rounded-2xl bg-secondary border-none"
             data-testid="search-input"
           />
           {searching && (
@@ -85,7 +93,7 @@ const ExplorePage = () => {
         </div>
 
         {searchQuery && searchResults.length > 0 && (
-          <div className="mt-4 bg-card border border-border rounded-xl overflow-hidden">
+          <div className="mt-4 bg-card border border-border rounded-2xl overflow-hidden">
             {searchResults.map((user) => (
               <Link
                 key={user.id}
@@ -112,48 +120,49 @@ const ExplorePage = () => {
 
         {searchQuery && searchResults.length === 0 && !searching && (
           <div className="mt-4 text-center py-8 text-muted-foreground">
-            No users found
+            No creators found
           </div>
         )}
       </div>
 
       {!searchQuery && (
         <>
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="w-5 h-5 text-accent" />
-            <h2 className="font-heading text-xl font-semibold">Discover by Mood</h2>
+          <div className="flex items-center gap-2 mb-2">
+            <Compass className="w-5 h-5 text-accent" />
+            <h2 className="font-heading text-2xl font-semibold">Explore Pixels by intent</h2>
           </div>
-          <p className="text-sm text-muted-foreground mb-5">
-            Explore posts by the emotional fingerprint creators assigned to them.
+          <p className="text-sm text-muted-foreground mb-5 max-w-2xl">
+            Browse projects that are asking for critique, looking for collaborators, or
+            sharing finished work with a visible version trail.
           </p>
 
           <div className="flex flex-wrap gap-2 mb-6">
             <button
               type="button"
-              onClick={() => setActiveMood("all")}
+              onClick={() => setActiveIntent("all")}
               className={`rounded-full border px-3 py-1.5 text-sm transition-all ${
-                activeMood === "all"
+                activeIntent === "all"
                   ? "border-white/20 bg-white/10 text-white"
                   : "border-border bg-background/40 text-muted-foreground hover:text-foreground"
               }`}
             >
-              All moods
+              All intents
             </button>
-            {MOOD_OPTIONS.filter((mood) => mood.value !== "unfiltered").map((mood) => {
-              const meta = getMoodMeta(mood.value);
-              const active = activeMood === mood.value;
+            {INTENT_OPTIONS.map((intent) => {
+              const meta = getIntentMeta(intent.value);
+              const active = activeIntent === intent.value;
               return (
                 <button
-                  key={mood.value}
+                  key={intent.value}
                   type="button"
-                  onClick={() => setActiveMood(mood.value)}
+                  onClick={() => setActiveIntent(intent.value)}
                   className={`rounded-full border px-3 py-1.5 text-sm transition-all ${
                     active
                       ? meta.badgeClass
                       : "border-border bg-background/40 text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {mood.label}
+                  {intent.label}
                 </button>
               );
             })}
@@ -163,45 +172,59 @@ const ExplorePage = () => {
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-8 h-8 animate-spin text-accent" />
             </div>
-          ) : filteredPosts.length === 0 ? (
+          ) : pixels.length === 0 ? (
             <div className="text-center py-20">
-              <p className="text-muted-foreground">
-                No posts match this mood yet
-              </p>
+              <p className="text-muted-foreground">No Pixels match this intent yet</p>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-1 md:gap-4">
-              {filteredPosts.map((post) => {
-                const moodMeta = getMoodMeta(post.mood);
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {pixels.map((pixel) => {
+                const intentMeta = getIntentMeta(pixel.intent);
                 return (
                   <button
-                    key={post.id}
-                    onClick={() => setSelectedPost(post)}
-                    className="aspect-square relative group overflow-hidden rounded-lg"
-                    data-testid={`explore-post-${post.id}`}
+                    key={pixel.id}
+                    onClick={() => setSelectedPixel(pixel)}
+                    className="text-left rounded-[28px] border border-border/60 bg-card overflow-hidden shadow-sm hover:-translate-y-1 transition-transform"
+                    data-testid={`explore-post-${pixel.id}`}
                   >
-                    <img
-                      src={post.image}
-                      alt={post.caption || "Post"}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                    <div
-                      className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${moodMeta.gradientClass}`}
-                    />
-                    <Badge
-                      variant="outline"
-                      className={`absolute top-3 left-3 rounded-full px-2.5 py-0.5 ${moodMeta.badgeClass}`}
-                    >
-                      {moodMeta.label}
-                    </Badge>
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-6">
-                      <div className="flex items-center gap-2 text-white">
-                        <Heart className="w-5 h-5 fill-white" />
-                        <span className="font-semibold">{post.likes_count}</span>
+                    <div className={`h-1.5 bg-gradient-to-r ${intentMeta.gradientClass}`} />
+                    <div className="p-4 space-y-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <Badge
+                            variant="outline"
+                            className={`rounded-full px-2.5 py-0.5 ${intentMeta.badgeClass}`}
+                          >
+                            {intentMeta.label}
+                          </Badge>
+                          <h3 className="font-heading text-xl mt-3">{pixel.title}</h3>
+                        </div>
+                        <Badge variant="outline" className="rounded-full px-3 py-1">
+                          v{pixel.latest_version_number}
+                        </Badge>
                       </div>
-                      <div className="flex items-center gap-2 text-white">
-                        <MessageCircle className="w-5 h-5 fill-white" />
-                        <span className="font-semibold">{post.echo_count}</span>
+
+                      <img
+                        src={pixel.image}
+                        alt={pixel.caption || pixel.title}
+                        className="w-full aspect-[4/3] object-cover rounded-[20px]"
+                      />
+
+                      {pixel.creative_goal && (
+                        <p className="text-sm text-muted-foreground leading-6 line-clamp-3">
+                          {pixel.creative_goal}
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between text-sm text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <GitBranchPlus className="w-4 h-4" />
+                          {pixel.versions_count} versions
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          <MessageSquareQuote className="w-4 h-4" />
+                          {pixel.comments_count} latest notes
+                        </span>
                       </div>
                     </div>
                   </button>
@@ -212,11 +235,13 @@ const ExplorePage = () => {
         </>
       )}
 
-      {selectedPost && (
+      {selectedPixel && (
         <PostDetailModal
-          post={selectedPost}
-          open={!!selectedPost}
-          onClose={() => setSelectedPost(null)}
+          post={selectedPixel}
+          open={!!selectedPixel}
+          onClose={() => setSelectedPixel(null)}
+          onUpdate={handlePixelUpdate}
+          onDelete={handlePixelDelete}
         />
       )}
     </div>

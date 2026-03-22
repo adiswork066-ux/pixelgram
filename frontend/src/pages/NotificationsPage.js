@@ -47,13 +47,13 @@ const NotificationsPage = () => {
     const getNotificationText = (type) => {
         switch (type) {
             case 'like':
-                return 'liked your post';
+                return 'appreciated your Pixel';
             case 'comment':
-                return 'commented on your post';
+                return 'left feedback on your Pixel';
             case 'follow':
                 return 'started following you';
             case 'echo':
-                return 'left an echo on your post';
+                return 'reacted to your Pixel';
             default:
                 return '';
         }

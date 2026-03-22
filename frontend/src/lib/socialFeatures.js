@@ -1,95 +1,122 @@
-export const MOOD_OPTIONS = [
+export const INTENT_OPTIONS = [
   {
-    value: "electric",
-    label: "Electric",
-    badgeClass: "border-cyan-400/30 bg-cyan-500/15 text-cyan-200",
-    panelClass: "border-cyan-400/20 bg-cyan-500/10",
-    gradientClass: "from-cyan-400 via-sky-500 to-blue-500",
-    accentClass: "text-cyan-300",
+    value: "showcase",
+    label: "Showcase",
+    description: "Present polished work and the finished outcome.",
+    badgeClass: "border-amber-300/30 bg-amber-500/10 text-amber-200",
+    panelClass: "border-amber-300/20 bg-amber-500/8",
+    gradientClass: "from-amber-300 via-orange-400 to-rose-400",
+    accentClass: "text-amber-300",
   },
   {
-    value: "soft",
-    label: "Soft",
-    badgeClass: "border-emerald-400/30 bg-emerald-500/15 text-emerald-200",
-    panelClass: "border-emerald-400/20 bg-emerald-500/10",
+    value: "feedback",
+    label: "Feedback",
+    description: "Invite critique and improve the work.",
+    badgeClass: "border-sky-300/30 bg-sky-500/10 text-sky-200",
+    panelClass: "border-sky-300/20 bg-sky-500/8",
+    gradientClass: "from-sky-300 via-cyan-400 to-blue-500",
+    accentClass: "text-sky-300",
+  },
+  {
+    value: "collaborate",
+    label: "Collaborate",
+    description: "Find people who want to build this with you.",
+    badgeClass: "border-emerald-300/30 bg-emerald-500/10 text-emerald-200",
+    panelClass: "border-emerald-300/20 bg-emerald-500/8",
     gradientClass: "from-emerald-300 via-teal-400 to-green-500",
     accentClass: "text-emerald-300",
   },
   {
-    value: "curious",
-    label: "Curious",
-    badgeClass: "border-amber-400/30 bg-amber-500/15 text-amber-200",
-    panelClass: "border-amber-400/20 bg-amber-500/10",
-    gradientClass: "from-amber-300 via-orange-400 to-yellow-500",
-    accentClass: "text-amber-300",
-  },
-  {
-    value: "nostalgic",
-    label: "Nostalgic",
-    badgeClass: "border-fuchsia-400/30 bg-fuchsia-500/15 text-fuchsia-200",
-    panelClass: "border-fuchsia-400/20 bg-fuchsia-500/10",
-    gradientClass: "from-fuchsia-300 via-pink-400 to-rose-500",
-    accentClass: "text-fuchsia-300",
-  },
-  {
-    value: "chaotic",
-    label: "Chaotic",
-    badgeClass: "border-red-400/30 bg-red-500/15 text-red-200",
-    panelClass: "border-red-400/20 bg-red-500/10",
-    gradientClass: "from-rose-400 via-red-500 to-orange-500",
-    accentClass: "text-red-300",
-  },
-  {
-    value: "hopeful",
-    label: "Hopeful",
-    badgeClass: "border-violet-400/30 bg-violet-500/15 text-violet-200",
-    panelClass: "border-violet-400/20 bg-violet-500/10",
-    gradientClass: "from-violet-300 via-indigo-400 to-blue-500",
-    accentClass: "text-violet-300",
-  },
-  {
-    value: "unfiltered",
-    label: "Unfiltered",
-    badgeClass: "border-white/15 bg-white/5 text-white/80",
-    panelClass: "border-white/10 bg-white/[0.03]",
-    gradientClass: "from-zinc-500 via-zinc-400 to-zinc-600",
-    accentClass: "text-white/80",
+    value: "experiment",
+    label: "Experiment",
+    description: "Share a rough idea without pressure.",
+    badgeClass: "border-rose-300/30 bg-rose-500/10 text-rose-200",
+    panelClass: "border-rose-300/20 bg-rose-500/8",
+    gradientClass: "from-rose-300 via-pink-400 to-fuchsia-500",
+    accentClass: "text-rose-300",
   },
 ];
 
-const ECHO_SUGGESTIONS = {
-  electric: ["charged", "alive", "bold", "cinematic"],
-  soft: ["gentle", "safe", "warm", "quiet"],
-  curious: ["intriguing", "smart", "unexpected", "clever"],
-  nostalgic: ["bittersweet", "familiar", "golden", "memory"],
-  chaotic: ["wild", "unhinged", "loud", "restless"],
-  hopeful: ["uplifting", "steady", "brave", "glowing"],
-  unfiltered: ["real", "honest", "raw", "relatable"],
+export const FEEDBACK_STYLE_OPTIONS = [
+  {
+    value: "brutal-honesty",
+    label: "Brutal honesty",
+    description: "Direct critique that prioritizes clarity over softness.",
+  },
+  {
+    value: "beginner-friendly",
+    label: "Beginner-friendly",
+    description: "Gentle, constructive guidance for someone still learning.",
+  },
+  {
+    value: "expert-only",
+    label: "Expert-only",
+    description: "Advanced critique from people with strong domain knowledge.",
+  },
+];
+
+export const getIntentMeta = (intent) =>
+  INTENT_OPTIONS.find((option) => option.value === intent) || INTENT_OPTIONS[0];
+
+export const getFeedbackStyleMeta = (feedbackStyle) =>
+  FEEDBACK_STYLE_OPTIONS.find((option) => option.value === feedbackStyle) ||
+  FEEDBACK_STYLE_OPTIONS[1];
+
+export const getFeedbackPrompt = (intent, feedbackStyle) => {
+  if (intent === "feedback") {
+    if (feedbackStyle === "brutal-honesty") {
+      return "What is the weakest part of this version, and what should change next?";
+    }
+    if (feedbackStyle === "expert-only") {
+      return "Offer advanced critique, references, or craft-specific suggestions.";
+    }
+    return "What works already, and what would you improve next?";
+  }
+
+  if (intent === "collaborate") {
+    return "How could you contribute, build, or partner on this Pixel?";
+  }
+
+  if (intent === "experiment") {
+    return "What direction would you test next if this were your draft?";
+  }
+
+  return "What stands out to you about this Pixel?";
 };
 
-export const getMoodMeta = (mood) =>
-  MOOD_OPTIONS.find((option) => option.value === mood) ||
-  MOOD_OPTIONS[MOOD_OPTIONS.length - 1];
+export const getIntentCTA = (intent) => {
+  if (intent === "collaborate") {
+    return "Connect";
+  }
+  if (intent === "feedback") {
+    return "Give feedback";
+  }
+  if (intent === "experiment") {
+    return "Suggest next step";
+  }
+  return "Open Pixel";
+};
 
-export const getEchoSuggestions = (mood) =>
-  ECHO_SUGGESTIONS[mood] || ECHO_SUGGESTIONS.unfiltered;
-
-export const getStoryProfile = (posts = []) => {
-  const storyLayers = posts.filter((post) => (post.backstory || "").trim()).length;
-  const totalEchoes = posts.reduce((sum, post) => sum + (post.echo_count || 0), 0);
-  const moodCounts = posts.reduce((counts, post) => {
-    const mood = post.mood || "unfiltered";
-    counts[mood] = (counts[mood] || 0) + 1;
+export const getPixelProfile = (pixels = []) => {
+  const totalVersions = pixels.reduce(
+    (sum, pixel) => sum + (pixel.versions_count || pixel.versions?.length || 1),
+    0,
+  );
+  const intentCounts = pixels.reduce((counts, pixel) => {
+    const intent = pixel.intent || "showcase";
+    counts[intent] = (counts[intent] || 0) + 1;
     return counts;
   }, {});
 
-  const signatureMood =
-    Object.entries(moodCounts).sort((left, right) => right[1] - left[1])[0]?.[0] ||
-    "unfiltered";
+  const dominantIntent =
+    Object.entries(intentCounts).sort((left, right) => right[1] - left[1])[0]?.[0] ||
+    "showcase";
 
   return {
-    signatureMood,
-    storyLayers,
-    totalEchoes,
+    totalVersions,
+    feedbackPixels: pixels.filter((pixel) => pixel.intent === "feedback").length,
+    collaborationPixels: pixels.filter((pixel) => pixel.intent === "collaborate").length,
+    experimentalPixels: pixels.filter((pixel) => pixel.intent === "experiment").length,
+    dominantIntent,
   };
 };

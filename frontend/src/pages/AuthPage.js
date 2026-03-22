@@ -41,23 +41,23 @@ const AuthPage = () => {
     return (
         <div className="min-h-screen bg-background flex">
             {/* Left side - Branding */}
-            <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-accent/20 via-background to-pink-500/20 items-center justify-center relative overflow-hidden">
+            <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-accent/20 via-background to-orange-500/20 items-center justify-center relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(59,130,246,0.1),transparent_50%)]" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_70%,rgba(236,72,153,0.1),transparent_50%)]" />
                 
                 <div className="relative z-10 text-center p-12">
                     <div className="flex items-center justify-center mb-8">
-                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent to-pink-500 flex items-center justify-center">
+                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent to-orange-500 flex items-center justify-center">
                             <Camera className="w-10 h-10 text-white" strokeWidth={1.5} />
                         </div>
                     </div>
                     <h1 className="font-heading text-5xl font-bold mb-4 tracking-tight">
-                        <span className="bg-gradient-to-r from-accent to-pink-500 bg-clip-text text-transparent">
-                            Pixelgram
+                        <span className="bg-gradient-to-r from-accent to-orange-500 bg-clip-text text-transparent">
+                            PixelGram
                         </span>
                     </h1>
                     <p className="text-xl text-muted-foreground max-w-md mx-auto leading-relaxed">
-                        Share your moments with the world. Connect with friends and discover amazing content.
+                        Build creative projects in public, ask for the right feedback, and show how your work evolves.
                     </p>
                 </div>
             </div>
@@ -68,8 +68,8 @@ const AuthPage = () => {
                     {/* Mobile logo */}
                     <div className="lg:hidden text-center mb-8">
                         <h1 className="font-heading text-4xl font-bold tracking-tight">
-                            <span className="bg-gradient-to-r from-accent to-pink-500 bg-clip-text text-transparent">
-                                Pixelgram
+                            <span className="bg-gradient-to-r from-accent to-orange-500 bg-clip-text text-transparent">
+                                PixelGram
                             </span>
                         </h1>
                     </div>
@@ -79,7 +79,7 @@ const AuthPage = () => {
                             {isLogin ? 'Welcome back' : 'Create account'}
                         </h2>
                         <p className="text-muted-foreground mb-6">
-                            {isLogin ? 'Sign in to continue to Pixelgram' : 'Sign up to start sharing'}
+                            {isLogin ? 'Sign in to continue building on PixelGram' : 'Sign up to drop your first Pixel'}
                         </p>
 
                         <form onSubmit={handleSubmit} className="space-y-4">
@@ -139,7 +139,7 @@ const AuthPage = () => {
 
                             <Button 
                                 type="submit" 
-                                className="w-full h-12 rounded-xl bg-gradient-to-r from-accent to-pink-500 hover:opacity-90 transition-opacity font-semibold"
+                                className="w-full h-12 rounded-xl bg-gradient-to-r from-accent to-orange-500 hover:opacity-90 transition-opacity font-semibold"
                                 disabled={loading}
                                 data-testid="auth-submit-btn"
                             >

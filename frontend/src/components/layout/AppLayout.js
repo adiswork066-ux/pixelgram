@@ -43,7 +43,7 @@ const AppLayout = () => {
     const navItems = [
         { to: '/', icon: Home, label: 'Home' },
         { to: '/explore', icon: Search, label: 'Explore' },
-        { action: () => setShowCreatePost(true), icon: PlusSquare, label: 'Create' },
+        { action: () => setShowCreatePost(true), icon: PlusSquare, label: 'Drop a Pixel' },
         { to: '/notifications', icon: Heart, label: 'Notifications', badge: unreadNotifications },
         { to: '/messages', icon: MessageCircle, label: 'Messages', badge: unreadMessages },
     ];
@@ -54,8 +54,8 @@ const AppLayout = () => {
             <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-64 border-r border-border/50 flex-col p-4 bg-background z-50">
                 <div className="mb-8 px-3">
                     <h1 className="font-heading text-2xl font-bold tracking-tight">
-                        <span className="bg-gradient-to-r from-accent to-pink-500 bg-clip-text text-transparent">
-                            Pixelgram
+                        <span className="bg-gradient-to-r from-accent to-orange-500 bg-clip-text text-transparent">
+                            PixelGram
                         </span>
                     </h1>
                 </div>
@@ -124,8 +124,8 @@ const AppLayout = () => {
             {/* Mobile Header */}
             <header className="lg:hidden fixed top-0 left-0 right-0 h-14 border-b border-border/50 bg-background/80 backdrop-blur-xl z-50 flex items-center justify-between px-4">
                 <h1 className="font-heading text-xl font-bold">
-                    <span className="bg-gradient-to-r from-accent to-pink-500 bg-clip-text text-transparent">
-                        Pixelgram
+                    <span className="bg-gradient-to-r from-accent to-orange-500 bg-clip-text text-transparent">
+                        PixelGram
                     </span>
                 </h1>
                 <div className="flex items-center gap-2">

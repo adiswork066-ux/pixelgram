@@ -351,9 +351,31 @@ class ProfileResponse(BaseModel):
 
 class PostCreate(BaseModel):
     image: str
+    title: Optional[str] = ""
     caption: Optional[str] = ""
+    intent: Optional[str] = "showcase"
+    feedback_style: Optional[str] = None
+    creative_goal: Optional[str] = ""
+    version_note: Optional[str] = ""
     mood: Optional[str] = "unfiltered"
     backstory: Optional[str] = ""
+
+
+class VersionCreate(BaseModel):
+    image: str
+    caption: Optional[str] = ""
+    version_note: Optional[str] = ""
+
+
+class PixelVersionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    version_number: int
+    image: str
+    caption: Optional[str] = ""
+    version_note: Optional[str] = ""
+    created_at: str
+    comments_count: int = 0
 
 class PostResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -361,15 +383,20 @@ class PostResponse(BaseModel):
     user_id: str
     username: str
     user_avatar: Optional[str] = None
+    title: Optional[str] = ""
+    intent: str = "showcase"
+    feedback_style: Optional[str] = None
+    creative_goal: Optional[str] = ""
+    versions_count: int = 1
+    latest_version_number: int = 1
+    active_version_id: str
+    active_version_number: int = 1
+    version_note: Optional[str] = ""
+    versions: List[PixelVersionResponse] = Field(default_factory=list)
     image: str
     caption: Optional[str] = ""
-    mood: Optional[str] = "unfiltered"
-    backstory: Optional[str] = ""
     likes_count: int = 0
     comments_count: int = 0
-    echo_count: int = 0
-    top_echoes: List[str] = Field(default_factory=list)
-    user_echo: Optional[str] = None
     is_liked: bool = False
     created_at: str
 
@@ -395,6 +422,8 @@ class CommentResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
     post_id: str
+    version_id: Optional[str] = None
+    version_number: Optional[int] = None
     user_id: str
     username: str
     user_avatar: Optional[str] = None
@@ -534,6 +563,128 @@ def build_echo_summary(echoes: list, current_user_id: Optional[str] = None):
     ]
 
     return echo_count, top_echoes, user_echo
+
+
+INTENT_CHOICES = {"showcase", "feedback", "collaborate", "experiment"}
+FEEDBACK_STYLE_CHOICES = {"brutal-honesty", "beginner-friendly", "expert-only"}
+
+
+def normalize_intent(intent: Optional[str]) -> str:
+    normalized = (intent or "showcase").strip().lower()
+    return normalized if normalized in INTENT_CHOICES else "showcase"
+
+
+def normalize_feedback_style(intent: str, feedback_style: Optional[str]) -> Optional[str]:
+    if intent != "feedback":
+        return None
+
+    normalized = (feedback_style or "beginner-friendly").strip().lower()
+    return normalized if normalized in FEEDBACK_STYLE_CHOICES else "beginner-friendly"
+
+
+def build_legacy_version(post: dict) -> dict:
+    return {
+        "id": post.get("latest_version_id") or f"{post['id']}-v1",
+        "version_number": 1,
+        "image": post.get("image", ""),
+        "caption": post.get("caption", ""),
+        "version_note": post.get("version_note") or post.get("backstory", ""),
+        "created_at": post.get("created_at", datetime.now(timezone.utc).isoformat()),
+    }
+
+
+def get_post_versions(post: dict) -> list[dict]:
+    versions = [version.copy() for version in (post.get("versions") or [])]
+    if not versions:
+        versions = [build_legacy_version(post)]
+    versions.sort(key=lambda version: version.get("version_number", 1))
+    return versions
+
+
+def get_active_version(post: dict, version_id: Optional[str] = None) -> dict:
+    versions = get_post_versions(post)
+    if version_id:
+        for version in versions:
+            if version["id"] == version_id:
+                return version
+
+    latest_version_id = post.get("latest_version_id")
+    if latest_version_id:
+        for version in versions:
+            if version["id"] == latest_version_id:
+                return version
+
+    return versions[-1]
+
+
+def get_pixel_title(post: dict) -> str:
+    title = (post.get("title") or "").strip()
+    if title:
+        return title[:100]
+
+    latest_version = get_active_version(post)
+    caption = (latest_version.get("caption") or "").strip()
+    if caption:
+        return caption[:100]
+
+    return "Untitled Pixel"
+
+
+def get_pixel_updated_at(post: dict) -> str:
+    active_version = get_active_version(post)
+    return (
+        post.get("updated_at")
+        or active_version.get("created_at")
+        or post.get("created_at")
+        or datetime.now(timezone.utc).isoformat()
+    )
+
+
+def get_comments_for_version(comments: list[dict], version: dict) -> list[dict]:
+    version_id = version["id"]
+    version_number = version.get("version_number", 1)
+
+    matched = []
+    for comment in comments:
+        comment_version_id = comment.get("version_id")
+        if comment_version_id:
+            if comment_version_id == version_id:
+                matched.append(comment)
+        elif version_number == 1:
+            matched.append(comment)
+
+    return matched
+
+
+def build_version_summaries(post: dict, post_comments: list[dict]) -> list[PixelVersionResponse]:
+    summaries = []
+    for version in get_post_versions(post):
+        comment_count = len(get_comments_for_version(post_comments, version))
+        summaries.append(
+            PixelVersionResponse(
+                id=version["id"],
+                version_number=version.get("version_number", 1),
+                image=version.get("image", ""),
+                caption=version.get("caption", ""),
+                version_note=version.get("version_note", ""),
+                created_at=version.get("created_at", post.get("created_at", "")),
+                comments_count=comment_count,
+            )
+        )
+    return summaries
+
+
+def sort_pixels_by_activity(posts: list[dict]) -> list[dict]:
+    return sorted(
+        posts,
+        key=lambda post: get_pixel_updated_at(post),
+        reverse=True,
+    )
+
+
+async def build_post_response(post: dict, current_user_id: Optional[str] = None) -> Optional[PostResponse]:
+    responses = await get_posts_with_details([post], current_user_id)
+    return responses[0] if responses else None
 
 # ==================== AUTH ROUTES ====================
 
@@ -826,7 +977,7 @@ async def get_following(user_id: str):
 # ==================== OPTIMIZED HELPER FUNCTIONS ====================
 
 async def get_posts_with_details(posts: list, current_user_id: Optional[str] = None) -> List[PostResponse]:
-    """Batch fetch all related data for posts to avoid N+1 queries"""
+    """Batch fetch all related data for Pixels to avoid N+1 queries."""
     if not posts:
         return []
     
@@ -845,21 +996,13 @@ async def get_posts_with_details(posts: list, current_user_id: Optional[str] = N
     likes_counts = await db.likes.aggregate(likes_pipeline).to_list(len(post_ids))
     likes_map = {lc["_id"]: lc["count"] for lc in likes_counts}
     
-    # Batch fetch comments counts using aggregation
-    comments_pipeline = [
-        {"$match": {"post_id": {"$in": post_ids}}},
-        {"$group": {"_id": "$post_id", "count": {"$sum": 1}}}
-    ]
-    comments_counts = await db.comments.aggregate(comments_pipeline).to_list(len(post_ids))
-    comments_map = {cc["_id"]: cc["count"] for cc in comments_counts}
-
-    echoes = await db.echoes.find(
+    all_comments = await db.comments.find(
         {"post_id": {"$in": post_ids}},
         {"_id": 0}
     ).to_list(5000)
-    echoes_map = {}
-    for echo in echoes:
-        echoes_map.setdefault(echo["post_id"], []).append(echo)
+    comments_map = {}
+    for comment in all_comments:
+        comments_map.setdefault(comment["post_id"], []).append(comment)
     
     # Batch fetch user's likes if authenticated
     user_likes_set = set()
@@ -876,27 +1019,37 @@ async def get_posts_with_details(posts: list, current_user_id: Optional[str] = N
         user = users_map.get(post["user_id"])
         if not user:
             continue
-        echo_count, top_echoes, user_echo = build_echo_summary(
-            echoes_map.get(post["id"], []),
-            current_user_id,
-        )
+        versions = get_post_versions(post)
+        active_version = get_active_version(post)
+        version_comments = comments_map.get(post["id"], [])
+        active_version_comments = get_comments_for_version(version_comments, active_version)
+        version_summaries = build_version_summaries(post, version_comments)
+        updated_at = get_pixel_updated_at(post)
         
         result.append(PostResponse(
             id=post["id"],
             user_id=post["user_id"],
             username=user["username"],
             user_avatar=user.get("avatar"),
-            image=post["image"],
-            caption=post.get("caption", ""),
-            mood=post.get("mood", "unfiltered"),
-            backstory=post.get("backstory", ""),
+            title=get_pixel_title(post),
+            intent=normalize_intent(post.get("intent")),
+            feedback_style=normalize_feedback_style(
+                normalize_intent(post.get("intent")),
+                post.get("feedback_style"),
+            ),
+            creative_goal=post.get("creative_goal", ""),
+            versions_count=len(versions),
+            latest_version_number=versions[-1].get("version_number", len(versions)),
+            active_version_id=active_version["id"],
+            active_version_number=active_version.get("version_number", 1),
+            version_note=active_version.get("version_note", ""),
+            versions=version_summaries,
+            image=active_version.get("image", post.get("image", "")),
+            caption=active_version.get("caption", post.get("caption", "")),
             likes_count=likes_map.get(post["id"], 0),
-            comments_count=comments_map.get(post["id"], 0),
-            echo_count=echo_count,
-            top_echoes=top_echoes,
-            user_echo=user_echo,
+            comments_count=len(active_version_comments),
             is_liked=post["id"] in user_likes_set,
-            created_at=post["created_at"]
+            created_at=updated_at,
         ))
     
     return result
@@ -916,6 +1069,8 @@ async def get_comments_with_users(comments: list) -> List[CommentResponse]:
         result.append(CommentResponse(
             id=comment["id"],
             post_id=comment["post_id"],
+            version_id=comment.get("version_id"),
+            version_number=comment.get("version_number"),
             user_id=comment["user_id"],
             username=user["username"] if user else "deleted",
             user_avatar=user.get("avatar") if user else None,
@@ -1025,44 +1180,57 @@ async def get_messages_with_users(messages: list) -> List[MessageResponse]:
 
 @api_router.post("/posts", response_model=PostResponse)
 async def create_post(post_data: PostCreate, current_user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc).isoformat()
+    version = {
+        "id": str(uuid.uuid4()),
+        "version_number": 1,
+        "image": post_data.image,
+        "caption": (post_data.caption or "").strip()[:2200],
+        "version_note": (
+            (post_data.version_note or "").strip()
+            or (post_data.backstory or "").strip()
+        )[:600],
+        "created_at": now,
+    }
     post = {
         "id": str(uuid.uuid4()),
         "user_id": current_user["id"],
-        "image": post_data.image,
-        "caption": post_data.caption or "",
-        "mood": (post_data.mood or "unfiltered").strip()[:32] or "unfiltered",
-        "backstory": (post_data.backstory or "").strip()[:600],
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "title": (post_data.title or "").strip()[:100],
+        "intent": normalize_intent(post_data.intent),
+        "feedback_style": normalize_feedback_style(
+            normalize_intent(post_data.intent),
+            post_data.feedback_style,
+        ),
+        "creative_goal": (post_data.creative_goal or "").strip()[:320],
+        "image": version["image"],
+        "caption": version["caption"],
+        "version_note": version["version_note"],
+        "versions": [version],
+        "latest_version_id": version["id"],
+        "latest_version_number": 1,
+        "created_at": now,
+        "updated_at": now,
     }
     
     await db.posts.insert_one(post)
-    
-    return PostResponse(
-        id=post["id"],
-        user_id=current_user["id"],
-        username=current_user["username"],
-        user_avatar=current_user.get("avatar"),
-        image=post["image"],
-        caption=post["caption"],
-        mood=post["mood"],
-        backstory=post["backstory"],
-        likes_count=0,
-        comments_count=0,
-        echo_count=0,
-        top_echoes=[],
-        user_echo=None,
-        is_liked=False,
-        created_at=post["created_at"]
-    )
+    return await build_post_response(post, current_user["id"])
 
 @api_router.get("/posts", response_model=List[PostResponse])
 async def get_posts(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
+    intent: Optional[str] = Query(None),
     current_user: Optional[dict] = Depends(get_optional_user)
 ):
     skip = (page - 1) * page_size
-    posts = await db.posts.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(page_size).to_list(page_size)
+    posts = await db.posts.find({}, {"_id": 0}).to_list(2000)
+    if intent:
+        normalized_intent = normalize_intent(intent)
+        posts = [
+            post for post in posts
+            if normalize_intent(post.get("intent")) == normalized_intent
+        ]
+    posts = sort_pixels_by_activity(posts)[skip:skip + page_size]
     
     return await get_posts_with_details(posts, current_user["id"] if current_user else None)
 
@@ -1070,6 +1238,7 @@ async def get_posts(
 async def get_feed(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
+    intent: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user)
 ):
     # Get following user IDs
@@ -1078,10 +1247,14 @@ async def get_feed(
     following_ids.append(current_user["id"])  # Include own posts
     
     skip = (page - 1) * page_size
-    posts = await db.posts.find(
-        {"user_id": {"$in": following_ids}},
-        {"_id": 0}
-    ).sort("created_at", -1).skip(skip).limit(page_size).to_list(page_size)
+    posts = await db.posts.find({"user_id": {"$in": following_ids}}, {"_id": 0}).to_list(2000)
+    if intent:
+        normalized_intent = normalize_intent(intent)
+        posts = [
+            post for post in posts
+            if normalize_intent(post.get("intent")) == normalized_intent
+        ]
+    posts = sort_pixels_by_activity(posts)[skip:skip + page_size]
     
     return await get_posts_with_details(posts, current_user["id"])
 
@@ -1090,38 +1263,11 @@ async def get_post(post_id: str, current_user: Optional[dict] = Depends(get_opti
     post = await db.posts.find_one({"id": post_id}, {"_id": 0})
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    
-    user = await db.users.find_one({"id": post["user_id"]}, {"_id": 0, "password": 0})
-    likes_count = await db.likes.count_documents({"post_id": post_id})
-    comments_count = await db.comments.count_documents({"post_id": post_id})
-    echoes = await db.echoes.find({"post_id": post_id}, {"_id": 0}).to_list(200)
-    echo_count, top_echoes, user_echo = build_echo_summary(
-        echoes,
-        current_user["id"] if current_user else None,
-    )
-    
-    is_liked = False
-    if current_user:
-        like = await db.likes.find_one({"post_id": post_id, "user_id": current_user["id"]})
-        is_liked = like is not None
-    
-    return PostResponse(
-        id=post["id"],
-        user_id=post["user_id"],
-        username=user["username"] if user else "deleted",
-        user_avatar=user.get("avatar") if user else None,
-        image=post["image"],
-        caption=post.get("caption", ""),
-        mood=post.get("mood", "unfiltered"),
-        backstory=post.get("backstory", ""),
-        likes_count=likes_count,
-        comments_count=comments_count,
-        echo_count=echo_count,
-        top_echoes=top_echoes,
-        user_echo=user_echo,
-        is_liked=is_liked,
-        created_at=post["created_at"]
-    )
+
+    response = await build_post_response(post, current_user["id"] if current_user else None)
+    if not response:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return response
 
 @api_router.get("/users/{user_id}/posts", response_model=List[PostResponse])
 async def get_user_posts(
@@ -1135,9 +1281,50 @@ async def get_user_posts(
         raise HTTPException(status_code=404, detail="User not found")
     
     skip = (page - 1) * page_size
-    posts = await db.posts.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(page_size).to_list(page_size)
+    posts = await db.posts.find({"user_id": user_id}, {"_id": 0}).to_list(2000)
+    posts = sort_pixels_by_activity(posts)[skip:skip + page_size]
     
     return await get_posts_with_details(posts, current_user["id"] if current_user else None)
+
+
+@api_router.post("/posts/{post_id}/versions", response_model=PostResponse)
+async def add_post_version(post_id: str, version_data: VersionCreate, current_user: dict = Depends(get_current_user)):
+    post = await db.posts.find_one({"id": post_id}, {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    if post["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="You do not have permission to edit this post")
+
+    versions = get_post_versions(post)
+    next_version_number = len(versions) + 1
+    now = datetime.now(timezone.utc).isoformat()
+    new_version = {
+        "id": str(uuid.uuid4()),
+        "version_number": next_version_number,
+        "image": version_data.image,
+        "caption": (version_data.caption or "").strip()[:2200],
+        "version_note": (version_data.version_note or "").strip()[:600],
+        "created_at": now,
+    }
+    versions.append(new_version)
+
+    updated_fields = {
+        "versions": versions,
+        "image": new_version["image"],
+        "caption": new_version["caption"],
+        "version_note": new_version["version_note"],
+        "latest_version_id": new_version["id"],
+        "latest_version_number": next_version_number,
+        "updated_at": now,
+    }
+    await db.posts.update_one({"id": post_id}, {"$set": updated_fields})
+
+    updated_post = {**post, **updated_fields}
+    response = await build_post_response(updated_post, current_user["id"])
+    if not response:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return response
 
 @api_router.delete("/posts/{post_id}")
 async def delete_post(post_id: str, current_user: dict = Depends(get_current_user)):
@@ -1190,16 +1377,28 @@ async def like_post(post_id: str, current_user: dict = Depends(get_current_user)
 # ==================== COMMENT ROUTES ====================
 
 @api_router.post("/posts/{post_id}/comments", response_model=CommentResponse)
-async def create_comment(post_id: str, comment_data: CommentCreate, current_user: dict = Depends(get_current_user)):
+async def create_comment(
+    post_id: str,
+    comment_data: CommentCreate,
+    version_id: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+):
     post = await db.posts.find_one({"id": post_id}, {"_id": 0})
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+
+    version = get_active_version(post, version_id)
+    text = (comment_data.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Comment cannot be empty")
     
     comment = {
         "id": str(uuid.uuid4()),
         "post_id": post_id,
+        "version_id": version["id"],
+        "version_number": version.get("version_number", 1),
         "user_id": current_user["id"],
-        "text": comment_data.text,
+        "text": text[:600],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.comments.insert_one(comment)
@@ -1209,6 +1408,8 @@ async def create_comment(post_id: str, comment_data: CommentCreate, current_user
     return CommentResponse(
         id=comment["id"],
         post_id=post_id,
+        version_id=comment["version_id"],
+        version_number=comment["version_number"],
         user_id=current_user["id"],
         username=current_user["username"],
         user_avatar=current_user.get("avatar"),
@@ -1217,8 +1418,14 @@ async def create_comment(post_id: str, comment_data: CommentCreate, current_user
     )
 
 @api_router.get("/posts/{post_id}/comments", response_model=List[CommentResponse])
-async def get_comments(post_id: str):
-    comments = await db.comments.find({"post_id": post_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+async def get_comments(post_id: str, version_id: Optional[str] = Query(None)):
+    post = await db.posts.find_one({"id": post_id}, {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    version = get_active_version(post, version_id)
+    comments = await db.comments.find({"post_id": post_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    comments = get_comments_for_version(comments, version)
     return await get_comments_with_users(comments)
 
 
@@ -1487,27 +1694,21 @@ async def generate_cloudinary_signature(
 async def explore_posts(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=50),
+    intent: Optional[str] = Query(None),
     current_user: Optional[dict] = Depends(get_optional_user)
 ):
     skip = (page - 1) * page_size
-    # Get posts with most likes
-    pipeline = [
-        {"$lookup": {
-            "from": "likes",
-            "localField": "id",
-            "foreignField": "post_id",
-            "as": "post_likes"
-        }},
-        {"$addFields": {"likes_count": {"$size": "$post_likes"}}},
-        {"$sort": {"likes_count": -1, "created_at": -1}},
-        {"$skip": skip},
-        {"$limit": page_size},
-        {"$project": {"_id": 0, "post_likes": 0}}
-    ]
+    posts = await db.posts.find({}, {"_id": 0}).to_list(2000)
+    if intent:
+        normalized_intent = normalize_intent(intent)
+        posts = [
+            post for post in posts
+            if normalize_intent(post.get("intent")) == normalized_intent
+        ]
+    detailed_posts = await get_posts_with_details(posts, current_user["id"] if current_user else None)
+    detailed_posts.sort(key=lambda post: (post.likes_count, post.created_at), reverse=True)
     
-    posts = await db.posts.aggregate(pipeline).to_list(page_size)
-    
-    return await get_posts_with_details(posts, current_user["id"] if current_user else None)
+    return detailed_posts[skip:skip + page_size]
 
 # Include the router in the main app
 app.include_router(api_router)
