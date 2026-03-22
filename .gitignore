@@ -41,6 +41,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 dump.rdb
+backend_uvicorn*.log
+deploy_smoke*.log
+run_backend*.log
+run_frontend*.log
+run_frontend_static*.log
 
 # System files
 .DS_Store
