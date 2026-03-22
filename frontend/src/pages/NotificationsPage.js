@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Link } from 'react-router-dom';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, Heart, MessageCircle, UserPlus } from 'lucide-react';
+import { Loader2, Heart, MessageCircle, UserPlus, Sparkles } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 const NotificationsPage = () => {
@@ -37,6 +37,8 @@ const NotificationsPage = () => {
                 return <MessageCircle className="w-5 h-5 text-accent" />;
             case 'follow':
                 return <UserPlus className="w-5 h-5 text-green-500" />;
+            case 'echo':
+                return <Sparkles className="w-5 h-5 text-amber-400" />;
             default:
                 return null;
         }
@@ -50,6 +52,8 @@ const NotificationsPage = () => {
                 return 'commented on your post';
             case 'follow':
                 return 'started following you';
+            case 'echo':
+                return 'left an echo on your post';
             default:
                 return '';
         }

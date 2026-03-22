@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Loader2, Grid3X3, Settings, Camera, MessageCircle, Heart } from 'lucide-react';
+import { Loader2, Grid3X3, Settings, Camera, MessageCircle, Heart, Sparkles, Layers3 } from 'lucide-react';
 import { useCloudinaryUpload } from '@/hooks/useCloudinaryUpload';
 import PostDetailModal from '@/components/modals/PostDetailModal';
+import { Badge } from '@/components/ui/badge';
+import { getMoodMeta, getStoryProfile } from '@/lib/socialFeatures';
 
 const ProfilePage = () => {
     const { username } = useParams();
@@ -26,6 +28,8 @@ const ProfilePage = () => {
     const [followLoading, setFollowLoading] = useState(false);
 
     const isOwnProfile = currentUser?.username === username;
+    const storyProfile = useMemo(() => getStoryProfile(posts), [posts]);
+    const signatureMood = getMoodMeta(storyProfile.signatureMood);
 
     const fetchProfile = useCallback(async () => {
         try {
@@ -191,6 +195,47 @@ const ProfilePage = () => {
                     {profile.bio && (
                         <p className="text-foreground max-w-md">{profile.bio}</p>
                     )}
+
+                    {posts.length > 0 && (
+                        <div className={`mt-5 max-w-xl rounded-3xl border p-4 ${signatureMood.panelClass}`}>
+                            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                <div className="space-y-2">
+                                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                                        Creative fingerprint
+                                    </p>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h2 className="font-heading text-lg font-semibold">Signature mood</h2>
+                                        <Badge
+                                            variant="outline"
+                                            className={`rounded-full px-3 py-1 ${signatureMood.badgeClass}`}
+                                        >
+                                            {signatureMood.label}
+                                        </Badge>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                        A quick read on how this profile feels across all its posts.
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3 text-sm min-w-[220px]">
+                                    <div className="rounded-2xl bg-background/60 p-3">
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Layers3 className="w-4 h-4" />
+                                            Story layers
+                                        </div>
+                                        <p className="mt-2 font-heading text-2xl font-bold">{storyProfile.storyLayers}</p>
+                                    </div>
+                                    <div className="rounded-2xl bg-background/60 p-3">
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Sparkles className="w-4 h-4" />
+                                            Echoes earned
+                                        </div>
+                                        <p className="mt-2 font-heading text-2xl font-bold">{storyProfile.totalEchoes}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -219,21 +264,35 @@ const ProfilePage = () => {
                             className="aspect-square relative group overflow-hidden rounded-lg"
                             data-testid={`post-grid-item-${post.id}`}
                         >
-                            <img 
-                                src={post.image} 
-                                alt={post.caption || 'Post'} 
-                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                            />
-                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-6">
-                                <div className="flex items-center gap-2 text-white">
-                                    <Heart className="w-5 h-5 fill-white" />
-                                    <span className="font-semibold">{post.likes_count}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-white">
-                                    <MessageCircle className="w-5 h-5 fill-white" />
-                                    <span className="font-semibold">{post.comments_count}</span>
-                                </div>
-                            </div>
+                            {(() => {
+                                const moodMeta = getMoodMeta(post.mood);
+                                return (
+                                    <>
+                                        <img 
+                                            src={post.image} 
+                                            alt={post.caption || 'Post'} 
+                                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                        />
+                                        <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${moodMeta.gradientClass}`} />
+                                        <Badge
+                                            variant="outline"
+                                            className={`absolute top-3 left-3 rounded-full px-2.5 py-0.5 ${moodMeta.badgeClass}`}
+                                        >
+                                            {moodMeta.label}
+                                        </Badge>
+                                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-6">
+                                            <div className="flex items-center gap-2 text-white">
+                                                <Heart className="w-5 h-5 fill-white" />
+                                                <span className="font-semibold">{post.likes_count}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-white">
+                                                <MessageCircle className="w-5 h-5 fill-white" />
+                                                <span className="font-semibold">{post.echo_count}</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
                         </button>
                     ))}
                 </div>

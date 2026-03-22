@@ -5,8 +5,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { getMoodMeta, MOOD_OPTIONS } from '@/lib/socialFeatures';
 import { toast } from 'sonner';
-import { ImagePlus, X, Loader2 } from 'lucide-react';
+import { ImagePlus, X, Loader2, Sparkles, Layers3 } from 'lucide-react';
 
 const CreatePostModal = ({ open, onClose }) => {
     const { api } = useAuth();
@@ -14,8 +16,11 @@ const CreatePostModal = ({ open, onClose }) => {
     const [image, setImage] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
     const [caption, setCaption] = useState('');
+    const [mood, setMood] = useState('unfiltered');
+    const [backstory, setBackstory] = useState('');
     const [creating, setCreating] = useState(false);
     const fileInputRef = useRef(null);
+    const moodMeta = getMoodMeta(mood);
 
     const handleImageSelect = (e) => {
         const file = e.target.files?.[0];
@@ -54,7 +59,9 @@ const CreatePostModal = ({ open, onClose }) => {
             // Create post
             await api().post('/posts', {
                 image: imageUrl,
-                caption: caption.trim()
+                caption: caption.trim(),
+                mood,
+                backstory: backstory.trim(),
             });
 
             toast.success('Post created!');
@@ -72,6 +79,8 @@ const CreatePostModal = ({ open, onClose }) => {
         setImage(null);
         setImagePreview(null);
         setCaption('');
+        setMood('unfiltered');
+        setBackstory('');
         onClose();
     };
 
@@ -143,6 +152,57 @@ const CreatePostModal = ({ open, onClose }) => {
                     <p className="text-xs text-muted-foreground text-right">
                         {caption.length}/2200
                     </p>
+
+                    <div className={`rounded-2xl border p-4 space-y-3 ${moodMeta.panelClass}`}>
+                        <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-accent" />
+                            <p className="text-sm font-semibold">Set the post mood</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {MOOD_OPTIONS.map((option) => {
+                                const optionMeta = getMoodMeta(option.value);
+                                const active = mood === option.value;
+                                return (
+                                    <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => setMood(option.value)}
+                                        className={`rounded-full border px-3 py-1.5 text-sm transition-all ${
+                                            active
+                                                ? optionMeta.badgeClass
+                                                : 'border-border bg-background/50 text-muted-foreground hover:text-foreground'
+                                        }`}
+                                    >
+                                        {option.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <Badge variant="outline" className={`rounded-full px-3 py-1 ${moodMeta.badgeClass}`}>
+                            {moodMeta.label} mode
+                        </Badge>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                            <Layers3 className="w-4 h-4 text-accent" />
+                            <p className="text-sm font-semibold">Behind the Frame</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Add the hidden second layer of this post. Viewers can reveal it later.
+                        </p>
+                        <Textarea
+                            placeholder="What was really happening when this photo was taken?"
+                            value={backstory}
+                            onChange={(e) => setBackstory(e.target.value)}
+                            rows={3}
+                            maxLength={320}
+                            className="resize-none bg-background/50"
+                        />
+                        <p className="text-xs text-muted-foreground text-right">
+                            {backstory.length}/320
+                        </p>
+                    </div>
 
                     {/* Actions */}
                     <div className="flex gap-3">

@@ -248,6 +248,7 @@ class MemoryDatabase:
             "follows",
             "likes",
             "comments",
+            "echoes",
             "notifications",
             "messages",
         ):
@@ -351,6 +352,8 @@ class ProfileResponse(BaseModel):
 class PostCreate(BaseModel):
     image: str
     caption: Optional[str] = ""
+    mood: Optional[str] = "unfiltered"
+    backstory: Optional[str] = ""
 
 class PostResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -360,13 +363,33 @@ class PostResponse(BaseModel):
     user_avatar: Optional[str] = None
     image: str
     caption: Optional[str] = ""
+    mood: Optional[str] = "unfiltered"
+    backstory: Optional[str] = ""
     likes_count: int = 0
     comments_count: int = 0
+    echo_count: int = 0
+    top_echoes: List[str] = Field(default_factory=list)
+    user_echo: Optional[str] = None
     is_liked: bool = False
     created_at: str
 
 class CommentCreate(BaseModel):
     text: str
+
+
+class EchoCreate(BaseModel):
+    text: str
+
+
+class EchoResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    post_id: str
+    user_id: str
+    username: str
+    user_avatar: Optional[str] = None
+    text: str
+    created_at: str
 
 class CommentResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -481,6 +504,36 @@ async def create_notification(sender_id: str, receiver_id: str, notification_typ
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.notifications.insert_one(notification)
+
+
+def build_echo_summary(echoes: list, current_user_id: Optional[str] = None):
+    echo_count = len(echoes)
+    user_echo = None
+    echo_frequency = {}
+
+    for echo in echoes:
+        text = (echo.get("text") or "").strip()
+        if not text:
+            continue
+
+        normalized = text.lower()
+        echo_frequency[normalized] = {
+            "text": text,
+            "count": echo_frequency.get(normalized, {}).get("count", 0) + 1,
+        }
+
+        if current_user_id and echo.get("user_id") == current_user_id:
+            user_echo = text
+
+    top_echoes = [
+        item["text"]
+        for item in sorted(
+            echo_frequency.values(),
+            key=lambda item: (-item["count"], item["text"].lower()),
+        )[:3]
+    ]
+
+    return echo_count, top_echoes, user_echo
 
 # ==================== AUTH ROUTES ====================
 
@@ -799,6 +852,14 @@ async def get_posts_with_details(posts: list, current_user_id: Optional[str] = N
     ]
     comments_counts = await db.comments.aggregate(comments_pipeline).to_list(len(post_ids))
     comments_map = {cc["_id"]: cc["count"] for cc in comments_counts}
+
+    echoes = await db.echoes.find(
+        {"post_id": {"$in": post_ids}},
+        {"_id": 0}
+    ).to_list(5000)
+    echoes_map = {}
+    for echo in echoes:
+        echoes_map.setdefault(echo["post_id"], []).append(echo)
     
     # Batch fetch user's likes if authenticated
     user_likes_set = set()
@@ -815,6 +876,10 @@ async def get_posts_with_details(posts: list, current_user_id: Optional[str] = N
         user = users_map.get(post["user_id"])
         if not user:
             continue
+        echo_count, top_echoes, user_echo = build_echo_summary(
+            echoes_map.get(post["id"], []),
+            current_user_id,
+        )
         
         result.append(PostResponse(
             id=post["id"],
@@ -823,8 +888,13 @@ async def get_posts_with_details(posts: list, current_user_id: Optional[str] = N
             user_avatar=user.get("avatar"),
             image=post["image"],
             caption=post.get("caption", ""),
+            mood=post.get("mood", "unfiltered"),
+            backstory=post.get("backstory", ""),
             likes_count=likes_map.get(post["id"], 0),
             comments_count=comments_map.get(post["id"], 0),
+            echo_count=echo_count,
+            top_echoes=top_echoes,
+            user_echo=user_echo,
             is_liked=post["id"] in user_likes_set,
             created_at=post["created_at"]
         ))
@@ -853,6 +923,33 @@ async def get_comments_with_users(comments: list) -> List[CommentResponse]:
             created_at=comment["created_at"]
         ))
     
+    return result
+
+
+async def get_echoes_with_users(echoes: list) -> List[EchoResponse]:
+    if not echoes:
+        return []
+
+    user_ids = list(set(e["user_id"] for e in echoes))
+    users = await db.users.find(
+        {"id": {"$in": user_ids}},
+        {"_id": 0, "password": 0}
+    ).to_list(len(user_ids))
+    users_map = {u["id"]: u for u in users}
+
+    result = []
+    for echo in echoes:
+        user = users_map.get(echo["user_id"])
+        result.append(EchoResponse(
+            id=echo["id"],
+            post_id=echo["post_id"],
+            user_id=echo["user_id"],
+            username=user["username"] if user else "deleted",
+            user_avatar=user.get("avatar") if user else None,
+            text=echo["text"],
+            created_at=echo["created_at"]
+        ))
+
     return result
 
 async def get_notifications_with_details(notifications: list) -> List[NotificationResponse]:
@@ -933,6 +1030,8 @@ async def create_post(post_data: PostCreate, current_user: dict = Depends(get_cu
         "user_id": current_user["id"],
         "image": post_data.image,
         "caption": post_data.caption or "",
+        "mood": (post_data.mood or "unfiltered").strip()[:32] or "unfiltered",
+        "backstory": (post_data.backstory or "").strip()[:600],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
@@ -945,8 +1044,13 @@ async def create_post(post_data: PostCreate, current_user: dict = Depends(get_cu
         user_avatar=current_user.get("avatar"),
         image=post["image"],
         caption=post["caption"],
+        mood=post["mood"],
+        backstory=post["backstory"],
         likes_count=0,
         comments_count=0,
+        echo_count=0,
+        top_echoes=[],
+        user_echo=None,
         is_liked=False,
         created_at=post["created_at"]
     )
@@ -990,6 +1094,11 @@ async def get_post(post_id: str, current_user: Optional[dict] = Depends(get_opti
     user = await db.users.find_one({"id": post["user_id"]}, {"_id": 0, "password": 0})
     likes_count = await db.likes.count_documents({"post_id": post_id})
     comments_count = await db.comments.count_documents({"post_id": post_id})
+    echoes = await db.echoes.find({"post_id": post_id}, {"_id": 0}).to_list(200)
+    echo_count, top_echoes, user_echo = build_echo_summary(
+        echoes,
+        current_user["id"] if current_user else None,
+    )
     
     is_liked = False
     if current_user:
@@ -1003,8 +1112,13 @@ async def get_post(post_id: str, current_user: Optional[dict] = Depends(get_opti
         user_avatar=user.get("avatar") if user else None,
         image=post["image"],
         caption=post.get("caption", ""),
+        mood=post.get("mood", "unfiltered"),
+        backstory=post.get("backstory", ""),
         likes_count=likes_count,
         comments_count=comments_count,
+        echo_count=echo_count,
+        top_echoes=top_echoes,
+        user_echo=user_echo,
         is_liked=is_liked,
         created_at=post["created_at"]
     )
@@ -1037,6 +1151,7 @@ async def delete_post(post_id: str, current_user: dict = Depends(get_current_use
     await db.posts.delete_one({"id": post_id})
     await db.likes.delete_many({"post_id": post_id})
     await db.comments.delete_many({"post_id": post_id})
+    await db.echoes.delete_many({"post_id": post_id})
     await db.notifications.delete_many({"post_id": post_id})
     
     return {"message": "Post deleted successfully"}
@@ -1105,6 +1220,61 @@ async def create_comment(post_id: str, comment_data: CommentCreate, current_user
 async def get_comments(post_id: str):
     comments = await db.comments.find({"post_id": post_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
     return await get_comments_with_users(comments)
+
+
+@api_router.get("/posts/{post_id}/echoes", response_model=List[EchoResponse])
+async def get_echoes(post_id: str):
+    echoes = await db.echoes.find(
+        {"post_id": post_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return await get_echoes_with_users(echoes)
+
+
+@api_router.post("/posts/{post_id}/echoes")
+async def create_echo(post_id: str, echo_data: EchoCreate, current_user: dict = Depends(get_current_user)):
+    post = await db.posts.find_one({"id": post_id}, {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    text = (echo_data.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Echo cannot be empty")
+    if len(text.split()) > 1:
+        raise HTTPException(status_code=400, detail="Echo must be a single word")
+
+    text = text[:20]
+    existing_echo = await db.echoes.find_one(
+        {"post_id": post_id, "user_id": current_user["id"]},
+        {"_id": 0}
+    )
+
+    if existing_echo:
+        await db.echoes.update_one(
+            {"id": existing_echo["id"]},
+            {"$set": {
+                "text": text,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }}
+        )
+    else:
+        echo = {
+            "id": str(uuid.uuid4()),
+            "post_id": post_id,
+            "user_id": current_user["id"],
+            "text": text,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.echoes.insert_one(echo)
+        await create_notification(current_user["id"], post["user_id"], "echo", post_id)
+
+    echoes = await db.echoes.find({"post_id": post_id}, {"_id": 0}).to_list(200)
+    echo_count, top_echoes, user_echo = build_echo_summary(echoes, current_user["id"])
+    return {
+        "echo_count": echo_count,
+        "top_echoes": top_echoes,
+        "user_echo": user_echo,
+    }
 
 @api_router.delete("/comments/{comment_id}")
 async def delete_comment(comment_id: str, current_user: dict = Depends(get_current_user)):
@@ -1337,34 +1507,7 @@ async def explore_posts(
     
     posts = await db.posts.aggregate(pipeline).to_list(page_size)
     
-    result = []
-    for post in posts:
-        user = await db.users.find_one({"id": post["user_id"]}, {"_id": 0, "password": 0})
-        if not user:
-            continue
-        
-        likes_count = await db.likes.count_documents({"post_id": post["id"]})
-        comments_count = await db.comments.count_documents({"post_id": post["id"]})
-        
-        is_liked = False
-        if current_user:
-            like = await db.likes.find_one({"post_id": post["id"], "user_id": current_user["id"]})
-            is_liked = like is not None
-        
-        result.append(PostResponse(
-            id=post["id"],
-            user_id=post["user_id"],
-            username=user["username"],
-            user_avatar=user.get("avatar"),
-            image=post["image"],
-            caption=post.get("caption", ""),
-            likes_count=likes_count,
-            comments_count=comments_count,
-            is_liked=is_liked,
-            created_at=post["created_at"]
-        ))
-    
-    return result
+    return await get_posts_with_details(posts, current_user["id"] if current_user else None)
 
 # Include the router in the main app
 app.include_router(api_router)
