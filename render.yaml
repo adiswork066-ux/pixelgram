@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: pixelgram-app
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DB_NAME
+        value: pixelgram
+      - key: MONGO_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false

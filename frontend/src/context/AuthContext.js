@@ -6,10 +6,7 @@ import React, {
   useCallback,
 } from "react";
 import axios from "axios";
-
-const BACKEND_URL =
-  process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-const API = `${BACKEND_URL}/api`;
+import { API_BASE_URL } from "@/lib/api";
 
 const AuthContext = createContext(null);
 
@@ -28,7 +25,7 @@ export const AuthProvider = ({ children }) => {
 
   const api = useCallback(() => {
     const instance = axios.create({
-      baseURL: API,
+      baseURL: API_BASE_URL,
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     return instance;
@@ -39,7 +36,7 @@ export const AuthProvider = ({ children }) => {
       const storedToken = localStorage.getItem("token");
       if (storedToken) {
         try {
-          const response = await axios.get(`${API}/auth/me`, {
+          const response = await axios.get(`${API_BASE_URL}/auth/me`, {
             headers: { Authorization: `Bearer ${storedToken}` },
           });
           setUser(response.data);
@@ -56,7 +53,10 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    const response = await axios.post(`${API}/auth/login`, { email, password });
+    const response = await axios.post(`${API_BASE_URL}/auth/login`, {
+      email,
+      password,
+    });
     const { access_token, refresh_token, user: userData } = response.data;
     localStorage.setItem("token", access_token);
     localStorage.setItem("refreshToken", refresh_token);
@@ -66,7 +66,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (username, email, password) => {
-    const response = await axios.post(`${API}/auth/register`, {
+    const response = await axios.post(`${API_BASE_URL}/auth/register`, {
       username,
       email,
       password,

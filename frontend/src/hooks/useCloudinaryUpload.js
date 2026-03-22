@@ -1,8 +1,5 @@
 import { useState, useCallback } from "react";
-
-const BACKEND_URL =
-  process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-const API = `${BACKEND_URL}/api`;
+import { API_BASE_URL } from "@/lib/api";
 
 export const useCloudinaryUpload = () => {
   const [uploading, setUploading] = useState(false);
@@ -25,7 +22,7 @@ export const useCloudinaryUpload = () => {
 
       // Get signature from backend
       const sigResponse = await fetch(
-        `${API}/cloudinary/signature?resource_type=image&folder=${folder}`,
+        `${API_BASE_URL}/cloudinary/signature?resource_type=image&folder=${folder}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },

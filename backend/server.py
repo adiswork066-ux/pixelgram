@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query, File, UploadFile
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -19,6 +20,7 @@ import re
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+FRONTEND_BUILD_DIR = ROOT_DIR.parent / "frontend" / "build"
 
 
 def _apply_projection(document: dict, projection: Optional[dict] = None) -> dict:
@@ -218,7 +220,8 @@ class MemoryDatabase:
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 db_name = os.environ.get('DB_NAME', 'pixelgram')
-client = AsyncIOMotorClient(mongo_url)
+mongo_timeout_ms = int(os.environ.get("MONGO_TIMEOUT_MS", "5000"))
+client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=mongo_timeout_ms)
 mongo_db = client[db_name]
 memory_db = MemoryDatabase()
 db = memory_db
@@ -260,6 +263,9 @@ cloudinary.config(
 
 @app.get("/")
 async def root():
+    index_file = FRONTEND_BUILD_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
     return {"status": "Pixelgrams backend running"}
 
 # Create a router with the /api prefix
@@ -440,6 +446,13 @@ async def create_notification(sender_id: str, receiver_id: str, notification_typ
     await db.notifications.insert_one(notification)
 
 # ==================== AUTH ROUTES ====================
+
+@api_router.get("/health")
+async def health_check():
+    return {
+        "status": "Pixelgrams backend running",
+        "database": "mongo" if db_available else "memory",
+    }
 
 @api_router.post("/auth/register", response_model=TokenResponse)
 async def register(user_data: UserCreate):
@@ -1319,7 +1332,10 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ.get(
+        'CORS_ORIGINS',
+        'http://localhost:3000,http://127.0.0.1:3000'
+    ).split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1334,3 +1350,19 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_frontend(full_path: str):
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API route not found")
+
+    index_file = FRONTEND_BUILD_DIR / "index.html"
+    if not index_file.exists():
+        raise HTTPException(status_code=404, detail="Frontend build not found")
+
+    requested_file = FRONTEND_BUILD_DIR / full_path
+    if full_path and requested_file.is_file():
+        return FileResponse(requested_file)
+
+    return FileResponse(index_file)
