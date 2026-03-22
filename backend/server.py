@@ -94,6 +94,23 @@ def _sanitize_mongo_url(url: str) -> str:
     return f"{scheme}://{quote_plus(userinfo)}@{hostinfo}"
 
 
+def _is_real_config_value(value: Optional[str]) -> bool:
+    if value is None:
+        return False
+
+    normalized = value.strip()
+    if not normalized:
+        return False
+
+    return normalized.lower() not in {
+        "optional",
+        "changeme",
+        "your-cloud-name",
+        "your-api-key",
+        "your-api-secret",
+    }
+
+
 class MemoryCursor:
     def __init__(self, documents: list[dict]):
         self._documents = [document.copy() for document in documents]
@@ -1266,7 +1283,10 @@ async def generate_cloudinary_signature(
     api_secret = os.environ.get("CLOUDINARY_API_SECRET")
     cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME")
     api_key = os.environ.get("CLOUDINARY_API_KEY")
-    if not all([api_secret, cloud_name, api_key]):
+    if not all(
+        _is_real_config_value(value)
+        for value in (api_secret, cloud_name, api_key)
+    ):
         return {
             "signature": None,
             "timestamp": timestamp,
