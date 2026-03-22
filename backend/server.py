@@ -17,6 +17,7 @@ import cloudinary
 import cloudinary.utils
 import time
 import re
+from urllib.parse import quote_plus
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -73,6 +74,24 @@ def _sort_documents(documents: list[dict], sort_spec: dict) -> list[dict]:
     for field, direction in reversed(list(sort_spec.items())):
         documents.sort(key=lambda item: item.get(field) or "", reverse=direction == -1)
     return documents
+
+
+def _sanitize_mongo_url(url: str) -> str:
+    if "://" not in url:
+        return url
+
+    scheme, remainder = url.split("://", 1)
+    if not scheme.startswith("mongodb") or "@" not in remainder:
+        return url
+
+    userinfo, hostinfo = remainder.rsplit("@", 1)
+    if ":" in userinfo:
+        username, password = userinfo.split(":", 1)
+        return (
+            f"{scheme}://{quote_plus(username)}:{quote_plus(password)}@{hostinfo}"
+        )
+
+    return f"{scheme}://{quote_plus(userinfo)}@{hostinfo}"
 
 
 class MemoryCursor:
@@ -219,6 +238,7 @@ class MemoryDatabase:
 
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+mongo_url = _sanitize_mongo_url(mongo_url)
 db_name = os.environ.get('DB_NAME', 'pixelgram')
 mongo_timeout_ms = int(os.environ.get("MONGO_TIMEOUT_MS", "5000"))
 client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=mongo_timeout_ms)
